@@ -1,0 +1,40 @@
+def readInData():
+    '''
+    only used in programming
+    :return:
+    '''
+    return 0
+
+class episode(object):
+    def __init__(self,timeStamp):
+        self.timeStamp = timeStamp
+class station(object):
+    def __init__(self,ID,dockAvaNumber,bikeAvaNumber):
+        self.ID=ID
+        self.dockAvaNumebr = dockAvaNumber
+        self.bikeAvaNumber = bikeAvaNumber
+    def dockAvaNum(self):
+        print(self.dockAvaNumebr)
+    def bikeIn(self):
+        if self.dockAvaNumebr == 0:
+            print('No dock!')
+        else:
+            self.dockAvaNumebr = self.dockAvaNumebr - 1
+            self.bikeAvaNumber = self.bikeAvaNumber + 1
+    def bikeOut(self):
+        if self.bikeAvaNumber == 0:
+            print('No bike!')
+        else:
+            self.dockAvaNumebr = self.dockAvaNumebr + 1
+            self.bikeAvaNumber = self.bikeAvaNumber - 1
+
+
+'''
+station1 = station(1,10,5)
+station1.bikeIn()
+station1.bikeIn()
+station1.bikeIn()
+station1.bikeIn()
+station1.bikeOut()
+station1.dockAvaNum()
+'''
