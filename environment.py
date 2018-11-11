@@ -6,14 +6,6 @@ from simulator import Simulator
 
 class Environment(object):
     def __init__(self, simulator, num_regions, num_trikes, episode, capacity):
-        """
-        Args:
-            data: episode data, initialize state, otherwise random generate
-            simulator: episode data, initialize state, otherwise random
-            episode: [tau0, tau0 + delta0], tau0 is the episode begining time, delta0 is the episode length
-            plen: period duration
-            wlen: window duration
-        """
         self._simulator = simulator
         self._episode = episode
         self._capacity = capacity
@@ -27,6 +19,8 @@ class Environment(object):
 
     def step(self, action):
         """
+        Args:
+            action: a vector with length #region + capacity 
         Returns:
             next_state: the state observed
             reward: the reward for this action
