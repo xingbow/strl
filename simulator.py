@@ -41,7 +41,7 @@ class Simulator(object):
             tau0: the timestamp (continuous) when the bike is rent
             s0: the station where the bike is rent
         Returns:
-            (tau, s): s is the station id, tau is the return timestamp (continous)
+            (tau, s): tau is the return timestamp (continuous), s is the station id
         """
         s = np.random.randint(0, 10)
         while s == s0:
