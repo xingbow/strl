@@ -3,9 +3,9 @@ import numpy as np
 
 class Simulator(object):
     """Simulator is an event generator.
-    It generates events in form of (tau, s),
+    It generates events in form of (tau, r),
     where tau is the happening time (continuous) of that event
-    and s is the involved station id.
+    and r is the involved region id.
     """
 
     def __init__(self, data, delta_1, mu_r, t_r):
@@ -26,40 +26,40 @@ class Simulator(object):
         Args:
             t: period begining time
         Returns:
-            [(tau, s)]: tau is the rent timestamp (continuous), s is the station id
+            [(tau, r)]: tau is the rent timestamp (continuous), r is the region id
         """
         events = []
         for i in range(100):
-            s = np.random.randint(0, 10)
+            r = np.random.randint(0, 10)
             tau = np.random.random() * 10
-            events.append((tau, s))
+            events.append((tau, r))
         return events
 
-    def simulate_return_event(self, tau0, s0):
+    def simulate_return_event(self, tau0, r0):
         """
         Args:
             tau0: the timestamp (continuous) when the bike is rent
-            s0: the station where the bike is rent
+            r0: the region where the bike is rent
         Returns:
-            (tau, s): tau is the return timestamp (continuous), s is the station id
+            (tau, r): tau is the return timestamp (continuous), r is the region id
         """
-        s = np.random.randint(0, 10)
-        while s == s0:
-            s = np.random.randint(0, 10)
+        r = np.random.randint(0, 10)
+        while r == r0:
+            r = np.random.randint(0, 10)
         tau = tau0 + np.random.random() * 10
-        return tau, s
+        return tau, r
 
-    def simulate_reposition_event(self, tau0, s0, s1):
+    def simulate_reposition_event(self, tau0, r0, r1):
         """
         Args:
             tau0: the current time
-            s0: the station the trike are
-            s1: the station the trike will be
+            r0: the region the trike are
+            r1: the region the trike will be
         Returns:
-            (tau1, s1): tau1 the arrival time of the trike, s1 is the station the trike will be
+            (tau1, r1): tau1 the arrival time of the trike, r1 is the region the trike will be
         """
-        d = self._data.get_distance(s0, s1)
+        d = self._data.get_distance(r0, r1)
         epsilon = np.random.random()
         # equation (6) in the paper
         tau1 = tau0 + d / self._mu_r + self._t_r + epsilon
-        return tau1, s1
+        return tau1, r1
