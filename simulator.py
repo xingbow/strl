@@ -1,6 +1,19 @@
 import numpy as np
 
 
+class Data():
+    def __init__(self, num_regions):
+        self._d = np.random.random([num_regions, num_regions])
+        self._num_regions = num_regions
+
+    def distance(self, ra, rb):
+        return self._d[ra, rb]
+
+    @property
+    def regions(self):
+        return list(range(self._num_regions))
+
+
 class Simulator(object):
     """Simulator is an event generator.
     It generates events in form of (tau, r),
@@ -8,16 +21,16 @@ class Simulator(object):
     and r is the involved region id.
     """
 
-    def __init__(self, data, delta_1, mu_r, t_r):
+    def __init__(self, data, delta1=3600, mu_r=200/60, t_r=3*60):
         """
         Args:
             data: provided by xingbo
-            delta_1: the period length
+            delta1: the period length
             mu_r: trike speed
             t_r: loading time
         """
         self._data = data
-        self._delta_1 = delta_1
+        self._delta_1 = delta1
         self._mu_r = mu_r
         self._t_r = t_r
 
@@ -30,8 +43,8 @@ class Simulator(object):
         """
         events = []
         for i in range(100):
-            r = np.random.randint(0, 10)
-            tau = np.random.random() * 10
+            r = np.random.randint(0, len(self._data.regions))
+            tau = np.random.random() * 1000
             events.append((tau, r))
         return events
 
@@ -43,10 +56,10 @@ class Simulator(object):
         Returns:
             (tau, r): tau is the return timestamp (continuous), r is the region id
         """
-        r = np.random.randint(0, 10)
+        r = np.random.randint(0, len(self._data.regions))
         while r == r0:
-            r = np.random.randint(0, 10)
-        tau = tau0 + np.random.random() * 10
+            r = np.random.randint(0, len(self._data.regions))
+        tau = tau0 + np.random.random() * 1000
         return tau, r
 
     def simulate_reposition_event(self, tau0, r0, r1):
@@ -58,8 +71,8 @@ class Simulator(object):
         Returns:
             (tau1, r1): tau1 the arrival time of the trike, r1 is the region the trike will be
         """
-        d = self._data.get_distance(r0, r1)
-        epsilon = np.random.random()
+        d = self._data.distance(r0, r1)
+        epsilon = np.random.normal() * 100
         # equation (6) in the paper
         tau1 = tau0 + d / self._mu_r + self._t_r + epsilon
         return tau1, r1
