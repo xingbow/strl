@@ -2,6 +2,7 @@ import numpy as np
 import heapq
 import time
 from datetime import datetime
+import json
 import matplotlib.pyplot as plt
 
 from simulator import Simulator
@@ -23,7 +24,7 @@ class Event(object):
         return self.t < other.t
 
     def __str__(self):
-        return self.__class__.__name__ + ' ' + str(vars(self))
+        return self.__class__.__name__ + '\n' + str(vars(self))
 
 
 class RentEvent(Event):
@@ -36,28 +37,24 @@ class ReturnEvent(Event):
         super().__init__(t, r, a)
 
 
-class GetEvent(Event):
-    def __init__(self, t, r, a, r_put):
+class RepositionEvent(Event):
+    def __init__(self, t, r, a, b):
         super().__init__(t, r, a)
-        self.r_put = r_put
-
-
-class PutEvent(Event):
-    def __init__(self, t, r, a):
-        super().__init__(t, r, a)
+        self.b = b  # loaded bikes
 
 
 class Env(object):
     def __init__(self, simulator,
                  episode, num_regions,
-                 num_trikes, capacity):
+                 num_trikes, capacity, delta1):
 
-        # register varaibles
-        self._simulator = simulator
-        self._episode = episode
-        self._num_trikes = num_trikes
-        self._num_regions = num_regions
-        self._capacity = capacity
+        # register variables
+        self.simulator = simulator
+        self.episode = episode
+        self.num_trikes = num_trikes
+        self.num_regions = num_regions
+        self.capacity = capacity
+        self.delta1 = delta1
 
         # init render
         plt.show(block=False)
@@ -73,97 +70,88 @@ class Env(object):
             reward: the reward for this action
         """
         if self.done:
-            raise Exception("Env has been done.")
+            raise Exception("Env is done.")
 
-        if len(action) != 3:
+        if len(action) != 2:
             raise Exception("Error: Unknown action")
 
-        e = self._pop_event()
-        r_get, r_put, a = action
-        self._register_get_event(t_cur=e.t, r_cur=e.r,
-                                 r_get=r_get, r_put=r_put, a=a)
-        self._process_to_next_reposition_event()
+        r, a = action
 
-        return self.observation, self._reward
+        self._register_reposition_event(self.cre, r, a)
+        reward = self._process_to_next_reposition_event()
+
+        return self._get_obs(), reward
 
     def reset(self):
-        self._loads = np.random.randint(
-            10, 20, self._num_regions)    # region loads
-        self._limits = np.random.randint(
-            20, 40, self._num_regions)     # region capacity
+        self.cre = None  # current reposition event
+        self.loads = np.random.randint(
+            3, 10, self.num_regions)    # region loads
+        self.limits = np.random.randint(
+            20, 40, self.num_regions)     # region capacity
+        self.loss = 0
 
-        t = self._episode[0]
+        t = self.episode[0]
 
         rent_events = [RentEvent(t, r, 1)
-                       for t, r in self._simulator.get_rent_events(t)]
+                       for t, r in self.simulator.get_rent_events(t)]
 
-        put_events = [PutEvent(t, np.random.randint(0, self._num_regions), 0)
-                      for _ in range(self._num_trikes)]
+        reposition_events = [RepositionEvent(t, np.random.randint(self.num_regions), 0, self.capacity)
+                             for _ in range(self.num_trikes)]
 
-        self._events = rent_events + put_events
-        heapq.heapify(self._events)
+        self.events = rent_events + reposition_events
+        heapq.heapify(self.events)
 
         self._process_to_next_reposition_event()
+        return self._get_obs()
 
     def _increase(self, r, a):
         assert a >= 0
-        self._loads[r] += a
+        self.loads[r] += a
         miss = 0
-        if self._loads[r] > self._limits[r]:
-            miss = self._loads[r] - self._limits[r]
-            self._loads[r] = self._limits[r]
+        if self.loads[r] > self.limits[r]:
+            miss = self.loads[r] - self.limits[r]
+            self.loads[r] = self.limits[r]
         return miss
 
     def _decrease(self, r, a):
         assert a >= 0
-        self._loads[r] -= a
+        self.loads[r] -= a
         miss = 0
-        if self._loads[r] < 0:
-            miss = 0 - self._loads[r]
-            self._loads[r] = 0
+        if self.loads[r] < 0:
+            miss = 0 - self.loads[r]
+            self.loads[r] = 0
         return miss
 
     def _register_return_event(self, e: RentEvent, nearest=False):
         if nearest:
-            r = self._simulator.get_nearest_region(e.r)
+            r = self.simulator.get_nearest_region(e.r)
         else:
-            r = self._simulator.get_likely_region(e.t, e.r)
-        t = self._simulator.get_bike_arrival_time(e.t, e.r, r)
+            r = self.simulator.get_likely_region(e.t, e.r)
+        t = self.simulator.get_bike_arrival_time(e.t, e.r, r)
         self._push_event(ReturnEvent(t=t, r=r, a=e.a))
 
-    def _register_put_event(self, e: Event, nearest=False):
-        if nearest:
-            r = self._simulator.get_nearest_region(e.r)
-        else:
-            r = e.r_put
-        t = self._simulator.get_trike_arrival_time(e.t, e.r, r)
-        self._push_event(PutEvent(t=t, r=r, a=e.a))
-
-    def _register_get_event(self, t_cur, r_cur, r_get, r_put, a):
-        t_get = self._simulator.get_trike_arrival_time(t_cur, r_cur, r_get)
-        self._push_event(GetEvent(t=t_get, r=r_get, a=a, r_put=r_put))
+    def _register_reposition_event(self, e: RepositionEvent, r, a):
+        e.t = self.simulator.get_trike_arrival_time(e.t, e.r, r)
+        e.r = r
+        e.a = a
+        self._push_event(e)
 
     def _push_event(self, event):
-        heapq.heappush(self._events, event)
+        heapq.heappush(self.events, event)
 
     def _pop_event(self):
-        return heapq.heappop(self._events)
+        return heapq.heappop(self.events)
 
     def _process_to_next_reposition_event(self):
-        """
-        Returns:
-            event: the latest repo-return event
-            reward: reward during this process
-        """
         reward = 0
 
         while True:
             e = self._pop_event()
-            print(e)
 
             if isinstance(e, RentEvent):    # bike rent
                 miss = self._decrease(e.r, e.a)
                 reward -= miss
+                self.loss += miss
                 if miss == 0:   # success rent, register return
                     self._register_return_event(e)
 
@@ -174,55 +162,69 @@ class Env(object):
                     e.a = miss
                     self._register_return_event(e, True)
 
-            if isinstance(e, GetEvent):  # trike get bikes
-                miss = self._decrease(e.r, e.a)
-                e.a -= miss  # real load
-                self._register_put_event(e, False)
+            if isinstance(e, RepositionEvent):
+                assert 0 <= e.b <= self.capacity
+                if e.a > 0:  # unload
+                    e.a = min(e.a, e.b)  # check capacity
+                    miss = self._increase(e.r, e.a)
+                    e.b -= (e.a - miss)
+                elif e.a < 0:  # load
+                    e.a = abs(e.a)
+                    e.a = min(e.a, self.capacity - e.b)  # check capacity
+                    miss = self._decrease(e.r, e.a)
+                    e.b += (e.a - miss)
+                self.cre = e
+                break
 
-            if isinstance(e, PutEvent):  # trike put bikes
-                miss = self._increase(e.r, e.a)
-                reward -= miss
-                if miss != 0:  # return failed, register next return
-                    e.a -= miss
-                    self._register_put_event(e, True)
-                else:
-                    self._push_event(e)  # put it back
-                    break  # mission done for this reposition
-
-        self._reward = reward
+        return reward
 
     def render(self):
         plt.clf()
-        plt.bar(range(len(self._loads)), self._loads)
+        plt.bar(range(len(self.loads)), self.loads)
         plt.pause(1e-3)
 
-    @property
-    def observation(self):
-        o = list(self._loads)
-        put_events = [e for e in self._events if isinstance(e, PutEvent)]
-        for e in put_events:
-            o[e.r] += e.a
-        return o
+    def _get_obs(self):
+        # current state
+        b1 = np.array(self.loads)
+
+        maxt = self.tau + self.delta1
+
+        # demand state
+        b2 = np.zeros_like(b1)
+        for e in self.events:
+            if isinstance(e, RentEvent) and e.t < maxt:
+                b2[e.r] += e.a
+
+        # demand state
+        d2 = np.zeros_like(b1)
+        for e in self.events:
+            if isinstance(e, ReturnEvent) and e.t < maxt:
+                d2[e.r] += e.a
+
+        # bike state
+        o1 = b1 - b2 + d2
+
+        # other state
+        o2 = np.zeros_like(o1)
+        o2[self.cre.r] = 1
+
+        # self state
+        o3 = [self.cre.a]
+
+        return np.concatenate([o1, o2, o3])
 
     @property
-    def episode(self):
-        """
-        Current episode
-        """
-        return self._episode
+    def tau(self):
+        return self.cre.t
 
     @property
     def done(self):
-        return self._events[0].t > self._episode[1]
-
-    @property
-    def num_running_trike(self):
-        return len([e for e in self._events if isinstance(e, PutEvent)])
+        return self.events[0].t > self.episode[1]
 
 
 def main():
     num_regions = 10
-    num_trikes = 5
+    num_trikes = 2
     episode = [0, 3600 * 1]
     capacity = 5
 
@@ -230,16 +232,20 @@ def main():
               episode=episode,
               num_regions=num_regions,
               num_trikes=num_trikes,
-              capacity=capacity)
+              capacity=capacity,
+              delta1=600)
 
     def random_action(state):
-        return [np.random.randint(num_regions), np.random.randint(num_regions), np.random.randint(1, capacity)]
+        return [np.argmax(np.random.uniform(size=[num_regions])),
+                np.random.randint(-capacity, capacity)]
 
     state = np.zeros(num_regions)
+
     while not env.done:
         env.render()
-        state, reward = env.step(random_action(state))
-        print(reward)
+        action = random_action(state)
+        state, reward = env.step(action)
+        print(action, reward)
 
 
 if __name__ == "__main__":
