@@ -1,78 +1,67 @@
 import numpy as np
 
 
-class Data():
-    def __init__(self, num_regions):
-        self._d = np.random.random([num_regions, num_regions])
-        self._num_regions = num_regions
-
-    def distance(self, ra, rb):
-        return self._d[ra, rb]
-
-    @property
-    def regions(self):
-        return list(range(self._num_regions))
-
-
 class Simulator(object):
-    """Simulator is an event generator.
-    It generates events in form of (tau, r),
-    where tau is the happening time (continuous) of that event
-    and r is the involved region id.
-    """
-
-    def __init__(self, data, delta1=3600, mu_r=200/60, t_r=3*60):
+    def __init__(self, num_regions, real_mode=False):
         """
         Args:
-            data: provided by xingbo
-            delta1: the period length
-            mu_r: trike speed
-            t_r: loading time
+            real_mode: real world case or not, if real, simulate all, otherwise, query all
         """
-        self._data = data
-        self._delta_1 = delta1
-        self._mu_r = mu_r
-        self._t_r = t_r
+        self._num_regions = num_regions
+        self._distance = 1000 * \
+            np.abs(np.random.normal(
+                size=[self._num_regions, self._num_regions]))
 
-    def simulate_rent_events(self, t):
+    def get_rent_events(self, episode):
         """
         Args:
-            t: period begining time
+            episode: the episode required
         Returns:
-            [(tau, r)]: tau is the rent timestamp (continuous), r is the region id
+            [(t, r)]: t is the rent timestamp (continuous), r is the region id
         """
         events = []
         for i in range(100):
-            r = np.random.randint(0, len(self._data.regions))
-            tau = np.random.random() * 1000
-            events.append((tau, r))
+            r = np.random.randint(0, self._num_regions)
+            t = np.random.random() * 1000
+            events.append((t, r))
         return events
 
-    def simulate_return_event(self, tau0, r0):
+    def get_return_event(self, tau0, r0):
         """
+        Needed when agent interact with the world
         Args:
             tau0: the timestamp (continuous) when the bike is rent
             r0: the region where the bike is rent
         Returns:
-            (tau, r): tau is the return timestamp (continuous), r is the region id
+            (t, r): t is the return timestamp (continuous), r is the region id
         """
-        r = np.random.randint(0, len(self._data.regions))
+        r = np.random.randint(0, self._num_regions)
         while r == r0:
-            r = np.random.randint(0, len(self._data.regions))
-        tau = tau0 + np.random.random() * 1000
-        return tau, r
+            r = np.random.randint(0, self._num_regions)
+        t = tau0 + np.random.random() * 1000
+        return t, r
 
-    def simulate_reposition_event(self, tau0, r0, r1):
+    def get_nearest_region(self, r):
         """
+        Needed when handle the case when the station is full
         Args:
-            tau0: the current time
-            r0: the region the trike are
-            r1: the region the trike will be
+            r: region id
         Returns:
-            (tau1, r1): tau1 the arrival time of the trike, r1 is the region the trike will be
+            nearest region
         """
-        d = self._data.distance(r0, r1)
-        epsilon = np.random.normal() * 100
-        # equation (6) in the paper
-        tau1 = tau0 + d / self._mu_r + self._t_r + epsilon
-        return tau1, r1
+        return np.argmax(self._distance[r])
+
+    def get_distance(self, ra, rb):
+        """
+        Needed when estimate time for reposition
+        """
+        return self._distance[ra, rb]
+
+    def get_likely_region(self, t, r):
+        return np.random.randint(0, self._num_regions)
+
+    def get_bike_arrival_time(self, t, ra, rb):
+        return t + self.get_distance(ra, rb) / 10
+
+    def get_trike_arrival_time(self, t, ra, rb):
+        return t + self.get_distance(ra, rb) / 50
