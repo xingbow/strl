@@ -46,7 +46,8 @@ class RepositionEvent(Event):
 class Env(object):
     def __init__(self, simulator,
                  episode, num_regions,
-                 num_trikes, capacity, delta1):
+                 num_trikes, capacity,
+                 rho, delta):
 
         # register variables
         self.simulator = simulator
@@ -54,7 +55,8 @@ class Env(object):
         self.num_trikes = num_trikes
         self.num_regions = num_regions
         self.capacity = capacity
-        self.delta1 = delta1
+        self.delta = delta
+        self.rho = rho
 
         # init render
         plt.show(block=False)
@@ -75,12 +77,25 @@ class Env(object):
         if len(action) != 2:
             raise Exception("Error: Unknown action")
 
+        # pruning
+        if np.min(self.loads) <= self.rho:  # deficient
+            r = np.argmin(self.loads)
+            a = self.cre.b
+            action = [r, a]
+            # print('deficient at {}'.format(r))
+
+        if np.min(self.limits - self.loads) <= self.rho:  # congested
+            r = np.argmin(self.limits - self.loads)
+            a = self.capacity - self.cre.b
+            action = [r, a]
+            # print('congested at {}'.format(r))
+
         r, a = action
 
         self._register_reposition_event(self.cre, r, a)
         reward = self._process_to_next_reposition_event()
 
-        return self._get_obs(), reward
+        return self._get_obs(), action, reward
 
     def reset(self):
         self.cre = None  # current reposition event
@@ -187,7 +202,7 @@ class Env(object):
         # current state
         b1 = np.array(self.loads)
 
-        maxt = self.tau + self.delta1
+        maxt = self.tau + self.delta
 
         # demand state
         b2 = np.zeros_like(b1)
@@ -233,7 +248,7 @@ def main():
               num_regions=num_regions,
               num_trikes=num_trikes,
               capacity=capacity,
-              delta1=600)
+              delta=600)
 
     def random_action(state):
         return [np.argmax(np.random.uniform(size=[num_regions])),
@@ -244,7 +259,7 @@ def main():
     while not env.done:
         env.render()
         action = random_action(state)
-        state, reward = env.step(action)
+        state, action, reward = env.step(action)
         print(action, reward)
 
 
