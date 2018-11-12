@@ -37,14 +37,14 @@ class DQNAgent(object):
         s1_ = Lambda(lambda x: x[:, 5 * n + 3:6 * n + 3])(input_)
         b1_ = Lambda(lambda x: x[:, 6 * n + 3:6 * n + 4])(input_)
 
-        embedding_layer = Dense(32, activation='relu')
+        embedding_layer = Dense(128, activation='relu')
 
         embedding = concatenate([embedding_layer(x)for x in [s0, s0_, s1, s1_]]
                                 + [a0, b0, b0_, a1, b1, b1_])
 
         fully_connect_layers = Sequential([
-            Dense(24, activation='relu'),
-            Dense(24, activation='relu'),
+            Dense(64, activation='relu'),
+            Dense(128, activation='relu'),
             Dense(self.action_size, activation='linear')
         ])
 
@@ -55,7 +55,8 @@ class DQNAgent(object):
         model.compile(loss='mse',
                       optimizer=Adam(lr=self.learning_rate))
 
-        print(model.summary())
+        # print(model.summary())
+
         return model
 
     def remember(self, state, action, reward, next_state, done):

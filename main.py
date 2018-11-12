@@ -78,10 +78,9 @@ def run_dqn():
         agent.replay(batch_size)
         losses += [env.loss]
 
-        print(env.loss)
-        print('mean', np.mean(losses[-10:]))
-
-        print("episode: {}/{}, e: {:.2}".format(epoch, num_epochs, agent.epsilon))
+        print('{}/{} loss {}, smooth loss {}'.format(
+            epoch, num_epochs,
+            losses[-1], np.mean(losses[-10:])))
 
 
 def run_baseline():
