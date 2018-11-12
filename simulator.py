@@ -15,31 +15,34 @@ class Simulator(object):
     def get_rent_events(self, episode):
         """
         Args:
-            episode: the episode required
+            episode: [a, b] the episode required
         Returns:
             [(t, r)]: t is the rent timestamp (continuous), r is the region id
         """
         events = []
-        for i in range(100):
+        for i in range(1000):
             r = np.random.randint(0, self._num_regions)
             t = np.random.random() * 1000
             events.append((t, r))
         return events
 
-    def get_return_event(self, tau0, r0):
+    def get_likely_region(self, t, r):
         """
-        Needed when agent interact with the world
-        Args:
-            tau0: the timestamp (continuous) when the bike is rent
-            r0: the region where the bike is rent
-        Returns:
-            (t, r): t is the return timestamp (continuous), r is the region id
+        Needed when generate return event
         """
-        r = np.random.randint(0, self._num_regions)
-        while r == r0:
-            r = np.random.randint(0, self._num_regions)
-        t = tau0 + np.random.random() * 1000
-        return t, r
+        return np.random.randint(0, self._num_regions)
+
+    def get_bike_arrival_time(self, t, ra, rb):
+        """
+        Needed when generate return event
+        """
+        return t + self.get_distance(ra, rb) / 10
+
+    def get_trike_arrival_time(self, t, ra, rb):
+        """
+        Needed when generate reposition
+        """
+        return t + self.get_distance(ra, rb) / 50
 
     def get_nearest_region(self, r):
         """
@@ -53,15 +56,6 @@ class Simulator(object):
 
     def get_distance(self, ra, rb):
         """
-        Needed when estimate time for reposition
+        Needed when estimate time for trike reposition
         """
         return self._distance[ra, rb]
-
-    def get_likely_region(self, t, r):
-        return np.random.randint(0, self._num_regions)
-
-    def get_bike_arrival_time(self, t, ra, rb):
-        return t + self.get_distance(ra, rb) / 10
-
-    def get_trike_arrival_time(self, t, ra, rb):
-        return t + self.get_distance(ra, rb) / 50
