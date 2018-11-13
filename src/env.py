@@ -92,8 +92,8 @@ class Env(object):
         if self.done:
             raise Exception("Env is done.")
 
-        if len(action) != 2:
-            raise Exception("Error: Unknown action")
+        if action > self.action_size or action < 0:
+            raise Exception("Unknown action")
 
         r, a = self.decode_action(action)
 
@@ -104,14 +104,14 @@ class Env(object):
 
     def reset(self):
         self.cre = None  # current reposition event
-        self.loads = np.random.randint(
-            self.limits*0.1, self.limits, self.num_regions)    # region loads
+        self.loads = np.round(np.random.uniform(
+            0.5, 1, self.num_regions) * self.limits)
         self.loss = 0
 
         t = self.episode[0]
 
         rent_events = [RentEvent(t, r, 1)
-                       for t, r in self.simulator.get_rent_events(t)]
+                       for t, r in self.simulator.get_rent_events(self.episode)]
 
         reposition_events = [RepositionEvent(t,
                                              np.random.randint(

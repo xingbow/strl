@@ -6,6 +6,15 @@ import OIModel as om
 from collections import defaultdict
 
 
+def timing_wrapper(func):
+    def wrapped(*args, **kwargs):
+        # begin_time = time.time()
+        ret = func(*args, **kwargs)
+        # print(func.__name__, 'takes', time.time() - begin_time)
+        return ret
+    return wrapped
+
+
 def initialization():
     # type in file loc
     transitionDataLoc = '../data/dataOIModel.csv'  # transition file
@@ -18,9 +27,10 @@ def initialization():
 
     df = pd.read_csv('../data/station.csv')
     df['limit'] = df['limit'].fillna(df['limit'].mean())
-    df = df.sort_values('id')
     df = df.drop_duplicates('id')
-    ids = df['id']
+    df = df.sort_values('id')
+    df = df.head(30)
+    ids = df['id'].values
     id_to_ix = {v: i for i, v in enumerate(ids)}
 
     points = df[['x', 'y']].values
@@ -40,44 +50,58 @@ def initialization():
             dist[j][i] = dist[i][j]
 
     def distance(i, j):
+        assert 0 <= i < len(ids) and 0 <= j < len(ids)
         return dist[i][j]
 
     def nearest(i):
-        return max(dist[i].items(), lambda kv: kv[1])[0]
+        assert 0 <= i < len(ids)
+        return max(dist[i].items(), key=lambda kv: kv[1])[0]
 
     # Inputs time stamp : e.g. 1373964540
     # Inputs station ID : e.g.212
     # return: expected departure(rent) number of this station in a period(hour)
-
     def demands(t, i):
-        return om.get_expectDepartureNumber(
-            t, ids[i],
-            hisInputData,
-            weatherMatrix)
+        assert 0 <= i < len(ids)
+        try:
+            return om.get_expectDepartureNumber(
+                t, ids[i],
+                hisInputData,
+                weatherMatrix)
+        except:
+            return 0
 
     # Inputs time stamp : e.g. 1373964540
     # Inputs station ID : e.g.212
     # return: expected destination and departure time
+
     def destination(t, i):
-        return om.get_predictedDestination(
-            t, ids[i],
-            transitionMatrixDuration,
-            transitionMatrixDestination)[0]
+        assert 0 <= i < len(ids)
+        try:
+            return id_to_ix[om.get_predictedDestination(
+                t, ids[i],
+                transitionMatrixDuration,
+                transitionMatrixDestination)[0]]
+        except:
+            return 0
 
     # Inputs time stamp : e.g. 1373964540
     # Inputs start station ID : e.g.212
     # Inputs end station ID : e.g.404
     # return: expected time used
     def duration(t, i, j):
-        return om.get_predictedDuration(
-            t, ids[i], ids[j],
-            transitionMatrixDuration,
-            transitionMatrixDestination)
+        assert 0 <= i < len(ids) and 0 <= j < len(ids)
+        try:
+            return om.get_predictedDuration(
+                t, ids[i], ids[j],
+                transitionMatrixDuration,
+                transitionMatrixDestination)
+        except:
+            return 0
 
     def query_limits():
         return df['limit'].values
 
-    return demands, destination, duration, distance, nearest, query_limits
+    return map(timing_wrapper, [demands, destination, duration, distance, nearest, query_limits])
 
 
 demands, destination, duration, \
@@ -89,6 +113,8 @@ class Simulator(object):
         self.mu = mu
         self.tr = tr
         self.er = er
+        self.limits = query_limits()
+        print('#regions: {}'.format(len(self.limits)))
 
     def get_rent_events(self, episode):
         """
@@ -97,7 +123,12 @@ class Simulator(object):
         Returns:
             [(t, r)]: t is the rent timestamp (continuous), r is the region id
         """
-        return demands(episode, None)
+        ret = []
+        for t in range(episode[0], episode[1], 3600):
+            for i in range(len(self.limits)):
+                n = demands(t, i)
+                ret += [(t + np.random.uniform(0, 3600), i) for _ in range(n)]
+        return ret
 
     def get_likely_destination(self, t, r):
         """
@@ -109,7 +140,7 @@ class Simulator(object):
         """
         Needed when generate return event
         """
-        return duration(t, r0, r1)
+        return t + duration(t, r0, r1)
 
     def get_trike_arrival_time(self, t, r0, r1):
         """
@@ -134,4 +165,4 @@ class Simulator(object):
         return distance(r0, r1)
 
     def get_limits(self):
-        return query_limits()
+        return self.limits
