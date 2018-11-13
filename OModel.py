@@ -14,6 +14,10 @@ episode3 = [17,22]
 episode4 = [[11,12],[16,17]]
 episode5 = [22,23]'''
 
+'''Loading files'''
+weatherDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test0.csv'
+transitionDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test222.csv'
+stationStatusDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/stationStatus.csv'
 
 startTime = 1372608000  # 2013/7/1 0:00
 matrixSize = 3003
@@ -36,10 +40,6 @@ def read_inData():
     '''
 
     '''
-    '''Loading files'''
-    weatherDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test0.csv'
-    transitionDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test222.csv'
-    stationStatusDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/stationStatus.csv'
 
     '''Initialize'''
     [loadDuration, loadStartTime, loadEndTime, loadStartStaionID, loadEndStationID, loadClusterTag] = [0, 1, 2, 3, 5, 6]
