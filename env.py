@@ -177,7 +177,7 @@ class Env(object):
 
             if isinstance(e, ReturnEvent):  # bike return
                 miss = self._increase(e.r, e.a)
-                reward -= miss
+                # reward -= miss
                 if miss != 0:  # return failed, register next return
                     e.a = miss
                     self._register_return_event(e, True)

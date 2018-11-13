@@ -5,8 +5,6 @@ from collections import deque
 from keras.layers import Input, Dense, Conv2D, Activation, Lambda, concatenate
 from keras.utils import np_utils
 
-import keras.backend as K
-
 
 import numpy as np
 import random
