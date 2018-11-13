@@ -63,6 +63,24 @@ class Env(object):
 
         self.reset()
 
+    def pruning(self):
+        # pruning
+        action = None
+
+        if np.min(self.loads) <= self.rho:  # deficient
+            r = np.argmin(self.loads)
+            a = self.cre.b
+            action = [r, a]
+            # print('deficient at {}'.format(r))
+
+        if np.min(self.limits - self.loads) <= self.rho:  # congested
+            r = np.argmin(self.limits - self.loads)
+            a = self.capacity - self.cre.b
+            action = [r, a]
+            # print('congested at {}'.format(r)) ̰
+
+        return action
+
     def step(self, action):
         """
         Args:
@@ -77,25 +95,12 @@ class Env(object):
         if len(action) != 2:
             raise Exception("Error: Unknown action")
 
-        # pruning
-        if np.min(self.loads) <= self.rho:  # deficient
-            r = np.argmin(self.loads)
-            a = self.cre.b
-            action = [r, a]
-            # print('deficient at {}'.format(r))
-
-        if np.min(self.limits - self.loads) <= self.rho:  # congested
-            r = np.argmin(self.limits - self.loads)
-            a = self.capacity - self.cre.b
-            action = [r, a]
-            # print('congested at {}'.format(r))
-
         r, a = action
 
         self._register_reposition_event(self.cre, r, a)
         reward = self._process_to_next_reposition_event()
 
-        return self._get_obs(), action, reward
+        return self._get_obs(), reward
 
     def reset(self):
         self.cre = None  # current reposition event
@@ -199,34 +204,49 @@ class Env(object):
         plt.pause(1e-3)
 
     def _get_obs(self):
-        # current state
         b1 = np.array(self.loads)
+        b2 = self.future_rent_demands
+        d2 = self.future_return_demands
+        p = self.future_trike_status
 
+        a = b1 - b2 + d2 + p
+        sb = self.current_trike_status
+
+        return np.concatenate([a, sb])
+
+    @property
+    def future_rent_demands(self):
         maxt = self.tau + self.delta
-
-        # demand state
-        b2 = np.zeros_like(b1)
+        o = np.zeros(self.num_regions)
         for e in self.events:
             if isinstance(e, RentEvent) and e.t < maxt:
-                b2[e.r] += e.a
+                o[e.r] += e.a
+        return o
 
-        # demand state
-        d2 = np.zeros_like(b1)
+    @property
+    def future_return_demands(self):
+        maxt = self.tau + self.delta
+        o = np.zeros(self.num_regions)
         for e in self.events:
             if isinstance(e, ReturnEvent) and e.t < maxt:
-                d2[e.r] += e.a
+                o[e.r] += e.a
+        return o
 
-        # bike state
-        o1 = b1 - b2 + d2
+    @property
+    def future_trike_status(self):
+        maxt = self.tau + self.delta
+        o = np.zeros(self.num_regions)
+        for e in self.events:
+            if isinstance(e, RepositionEvent) and e.t < maxt:
+                o[e.r] += e.a
+        return o
 
-        # other state
-        o2 = np.zeros_like(o1)
-        o2[self.cre.r] = 1
-
-        # self state
-        o3 = [self.cre.a]
-
-        return np.concatenate([o1, o2, o3])
+    @property
+    def current_trike_status(self):
+        o = np.zeros(self.num_regions)
+        o[self.cre.r] = 1
+        o = np.concatenate([o, [self.cre.a]])
+        return o
 
     @property
     def tau(self):
@@ -259,7 +279,7 @@ def main():
     while not env.done:
         env.render()
         action = random_action(state)
-        state, action, reward = env.step(action)
+        state, reward = env.step(action)
         print(action, reward)
 
 
