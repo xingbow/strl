@@ -45,7 +45,7 @@ class RepositionEvent(Event):
 
 class Env(object):
     def __init__(self, simulator,
-                 episode, num_regions,
+                 episode,
                  num_trikes, capacity,
                  rho, delta):
 
@@ -53,10 +53,11 @@ class Env(object):
         self.simulator = simulator
         self.episode = episode
         self.num_trikes = num_trikes
-        self.num_regions = num_regions
         self.capacity = capacity
         self.delta = delta
         self.rho = rho
+        self.limits = self.simulator.get_limits()
+        self.num_regions = len(self.limits)
 
         # init render
         plt.show(block=False)
@@ -70,21 +71,20 @@ class Env(object):
         if np.min(self.loads) <= self.rho:  # deficient
             r = np.argmin(self.loads)
             a = self.cre.b
-            action = [r, a]
             # print('deficient at {}'.format(r))
 
         if np.min(self.limits - self.loads) <= self.rho:  # congested
             r = np.argmin(self.limits - self.loads)
             a = self.capacity - self.cre.b
-            action = [r, a]
             # print('congested at {}'.format(r)) ̰
 
+        action = self.encode_action(r, a)
         return action
 
     def step(self, action):
         """
         Args:
-            action: [region, #bikes]
+            action: an integer in [0, #regions * (2 * capacity + 1)]
         Returns:
             next_state: the state observed
             reward: the reward for this action
@@ -95,7 +95,7 @@ class Env(object):
         if len(action) != 2:
             raise Exception("Error: Unknown action")
 
-        r, a = action
+        r, a = self.decode_action(action)
 
         self._register_reposition_event(self.cre, r, a)
         reward = self._process_to_next_reposition_event()
@@ -105,9 +105,7 @@ class Env(object):
     def reset(self):
         self.cre = None  # current reposition event
         self.loads = np.random.randint(
-            3, 10, self.num_regions)    # region loads
-        self.limits = np.random.randint(
-            20, 40, self.num_regions)     # region capacity
+            self.limits*0.1, self.limits, self.num_regions)    # region loads
         self.loss = 0
 
         t = self.episode[0]
@@ -115,7 +113,10 @@ class Env(object):
         rent_events = [RentEvent(t, r, 1)
                        for t, r in self.simulator.get_rent_events(t)]
 
-        reposition_events = [RepositionEvent(t, np.random.randint(self.num_regions), 0, self.capacity)
+        reposition_events = [RepositionEvent(t,
+                                             np.random.randint(
+                                                 self.num_regions),
+                                             0, self.capacity)
                              for _ in range(self.num_trikes)]
 
         self.events = rent_events + reposition_events
@@ -146,7 +147,7 @@ class Env(object):
         if nearest:
             r = self.simulator.get_nearest_region(e.r)
         else:
-            r = self.simulator.get_likely_region(e.t, e.r)
+            r = self.simulator.get_likely_destination(e.t, e.r)
         t = self.simulator.get_bike_arrival_time(e.t, e.r, r)
         self._push_event(ReturnEvent(t=t, r=r, a=e.a))
 
@@ -256,32 +257,55 @@ class Env(object):
     def done(self):
         return self.events[0].t > self.episode[1]
 
+    def decode_action(self, action):
+        r = action % self.num_regions
+        a = action // self.num_regions - self.capacity
+        return r, a
 
-def main():
-    num_regions = 10
-    num_trikes = 2
-    episode = [0, 3600 * 1]
-    capacity = 5
+    def encode_action(self, r, a):
+        action = r + (a + self.capacity) * self.num_regions
+        return action
 
-    env = Env(simulator=Simulator(num_regions),
-              episode=episode,
-              num_regions=num_regions,
-              num_trikes=num_trikes,
-              capacity=capacity,
-              delta=600)
+    def featurize_action(self, action):
+        r, a = self.decode_action(action)
+        s = np.eye(self.num_regions)[r]
+        b = [a]
+        return np.concatenate([s, b])
 
-    def random_action(state):
-        return [np.argmax(np.random.uniform(size=[num_regions])),
-                np.random.randint(-capacity, capacity)]
+    @property
+    def observation_size(self):
+        return self._get_obs().shape
 
-    state = np.zeros(num_regions)
-
-    while not env.done:
-        env.render()
-        action = random_action(state)
-        state, reward = env.step(action)
-        print(action, reward)
+    @property
+    def action_size(self):
+        return self.num_regions * (self.capacity * 2 + 1)
 
 
-if __name__ == "__main__":
-    main()
+# def main():
+#     num_regions = 10
+#     num_trikes = 2
+#     episode = [0, 3600 * 1]
+#     capacity = 5
+
+#     env = Env(simulator=Simulator(num_regions),
+#               episode=episode,
+#               num_regions=num_regions,
+#               num_trikes=num_trikes,
+#               capacity=capacity,
+#               delta=600)
+
+#     def random_action(state):
+#         return [np.argmax(np.random.uniform(size=[num_regions])),
+#                 np.random.randint(-capacity, capacity)]
+
+#     state = np.zeros(num_regions)
+
+#     while not env.done:
+#         env.render()
+#         action = random_action(state)
+#         state, reward = env.step(action)
+#         print(action, reward)
+
+
+# if __name__ == "__main__":
+#     main()

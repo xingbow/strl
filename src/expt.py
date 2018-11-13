@@ -33,18 +33,6 @@ def run_vanilla_dqn(env, config):
     state_size = env._get_obs().shape[0]
     agent = VanillaDQNAgent(state_size, action_size)
 
-    def encode_action(action):
-        if action is None:
-            return None
-        r, a = action
-        ret = r + (a + capacity) * num_regions
-        return ret
-
-    def decode_action(action):
-        return [action % num_regions, action // num_regions - capacity]
-
-    assert all([encode_action(decode_action(a)) == a for a in range(1000)])
-
     losses = []
 
     for epoch in range(num_epochs):
@@ -53,11 +41,11 @@ def run_vanilla_dqn(env, config):
             # if epoch % 10 == 0:
             #     env.render()
 
-            action = encode_action(env.pruning())
+            action = env.pruning()
             if action is None:
                 action = agent.act(state)
 
-            next_state, reward = env.step(decode_action(action))
+            next_state, reward = env.step(action)
 
             agent.remember(state, action, reward, next_state, env.done)
             state = next_state
@@ -81,55 +69,33 @@ def run_dqn(env, config):
     agent = DQNAgent(num_regions=num_regions,
                      action_size=action_size)
 
-    def encode_action(action):
-        if action is None:
-            return None
-        r, a = action
-        ret = r + (a + capacity) * num_regions
-        return ret
-
-    def decode_action(action):
-        return [action % num_regions, action // num_regions - capacity]
-
-    def create_action_state(a):
-        a = decode_action(a)
-        s = np.eye(num_regions)[a[0]]
-        b = [a[1]]
-        return np.concatenate([s, b])
-
-    def create_state(o0, a0, o1, a1):
-        a0, a1 = map(lambda a: create_action_state(a), [a0, a1])
-        return np.concatenate([o0, a0, o1, a1])
-
-    assert all([encode_action(decode_action(a)) == a for a in range(1000)])
-
     losses = []
 
     for epoch in range(num_epochs):
         observations = [env.reset()] * 2
         actions = [0, 0]
-        state = create_state(observations[-2],
-                             actions[-2],
-                             observations[-1],
-                             actions[-1])
+
+        def create_state():
+            return np.concatenate([observations[-2],
+                                   env.featurize_action(actions[-2]),
+                                   observations[-1],
+                                   env.featurize_action(actions[-1])])
+
+        state = create_state()
 
         while not env.done:
             # if epoch % 10 == 0:
             #     env.render()
 
-            action = encode_action(env.pruning())
+            action = env.pruning()
             if action is None:
                 action = agent.act(state)
 
-            observation, reward = env.step(decode_action(action))
+            observation, reward = env.step(action)
 
             actions.append(action)
             observations.append(observation)
-
-            next_state = create_state(observations[-2],
-                                      actions[-2],
-                                      observations[-1],
-                                      actions[-1])
+            next_state = create_state()
 
             agent.remember(state, action, reward, next_state, env.done)
             state = next_state
@@ -152,18 +118,6 @@ def run_vanilla_pg(env, config):
     state_size = env._get_obs().shape[0]
     agent = VanillaPGAgent(state_size, action_size)
 
-    def encode_action(action):
-        if action is None:
-            return None
-        r, a = action
-        ret = r + (a + capacity) * num_regions
-        return ret
-
-    def decode_action(action):
-        return [action % num_regions, action // num_regions - capacity]
-
-    assert all([encode_action(decode_action(a)) == a for a in range(1000)])
-
     losses = []
 
     for epoch in range(num_epochs):
@@ -174,11 +128,11 @@ def run_vanilla_pg(env, config):
         state = env.reset()
 
         while not env.done:
-            action = encode_action(env.pruning())
+            action = env.pruning()
             if action is None:
                 action = agent.act(state)
 
-            next_state, reward = env.step(decode_action(action))
+            next_state, reward = env.step(action)
 
             S.append(state)
             A.append(action)
@@ -213,7 +167,11 @@ def main():
         "batch_size": batch_size,
     }
 
-    env = Env(simulator=Simulator(num_regions),
+    simulator = Simulator('',
+                          '',
+                          num_regions)
+
+    env = Env(simulator=simulator,
               episode=episode,
               num_regions=num_regions,
               num_trikes=num_trikes,
@@ -222,11 +180,9 @@ def main():
               rho=rho)
 
     # run_baseline(env, config)
-
     # run_vanilla_dqn(env, config)
     # run_dqn(env, config)
-
-    run_vanilla_pg(env, config)
+    # run_vanilla_pg(env, config)
 
 
 if __name__ == "__main__":
