@@ -3,6 +3,10 @@ from keras.optimizers import Adam
 from collections import deque
 
 from keras.layers import Input, Dense, Conv2D, Activation, Lambda, concatenate
+from keras.utils import np_utils
+
+import keras.backend as K
+
 
 import numpy as np
 import random
@@ -142,3 +146,80 @@ class VanillaDQNAgent(object):
 
     def save(self, name):
         self.model.save_weights(name)
+
+
+class VanillaPGAgent(object):
+
+    def __init__(self, state_size, action_size):
+        self.state_size = state_size
+        self.action_size = action_size
+
+        self._build_model(state_size, action_size)
+
+    def _build_model(self, state_size, action_size):
+        model = Sequential()
+        model.add(Dense(64, activation='relu'))
+        model.add(Dense(64, activation='relu'))
+        model.add(Dense(self.action_size, activation='softmax'))
+        model.compile(loss='categorical_crossentropy',
+                      optimizer='rmsprop')
+
+        self.model = model
+
+    def act(self, state):
+        """Returns an action at given `state`
+
+        Args:
+            state (1-D or 2-D Array): It can be either 1-D array of shape (state_dimension, )
+                or 2-D array shape of (n_samples, state_dimension)
+
+        Returns:
+            action: an integer action value ranging from 0 to (n_actions - 1)
+        """
+        shape = state.shape
+
+        if len(shape) == 1:
+            assert shape == (self.state_size,), "{} != {}".format(
+                shape, self.state_size)
+            state = np.expand_dims(state, axis=0)
+
+        elif len(shape) == 2:
+            assert shape[1] == (self.state_size), "{} != {}".format(
+                shape, self.state_size)
+
+        else:
+            raise TypeError(
+                "Wrong state shape is given: {}".format(state.shape))
+
+        action_prob = np.squeeze(self.model.predict(state))
+        assert len(action_prob) == self.action_size, "{} != {}".format(
+            len(action_prob), self.action_size)
+        return np.random.choice(np.arange(self.action_size), p=action_prob)
+
+    def replay(self, S, A, R):
+        """Train a network
+
+        Args:
+            S (2-D Array): `state` array of shape (n_samples, state_dimension)
+            A (1-D Array): `action` array of shape (n_samples,)
+                It's simply a list of int that stores which actions the agent chose
+            R (1-D Array): `reward` array of shape (n_samples,)
+                A reward is given after each action.
+
+        """
+        action_onehot = np_utils.to_categorical(
+            A, num_classes=self.action_size)
+
+        discounted_rewards = self._discounted_R(R)
+        advantage = (discounted_rewards - discounted_rewards.mean()
+                     ) / discounted_rewards.std()
+
+        self.model.fit(S, action_onehot, sample_weight=advantage, nb_epoch=1)
+
+    def _discounted_R(self, R, discount_rate=.99):
+        discounted_r = np.zeros_like(R, dtype=np.float32)
+        running_add = 0
+        for t in reversed(range(len(R))):
+            running_add = running_add * discount_rate + R[t]
+            discounted_r[t] = running_add
+        return discounted_r
