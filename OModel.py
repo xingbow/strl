@@ -14,20 +14,7 @@ episode3 = [17,22]
 episode4 = [[11,12],[16,17]]
 episode5 = [22,23]'''
 
-'''Loading files'''
-weatherDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test0.csv'
-transitionDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test222.csv'
-stationStatusDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/stationStatus.csv'
-
 startTime = 1372608000  # 2013/7/1 0:00
-matrixSize = 3003
-
-hisInputDataGlobal = []
-transitionMatrixDurationGlobal = []
-transitionMatrixDetinationGlobal = []
-weatherMatrixGlobal = []
-stationStatusMatrixGlobal = []
-
 
 def get_timeString(timeStamp):
     nowTime = datetime.datetime.fromtimestamp(timeStamp)
@@ -40,8 +27,13 @@ def read_inData():
     '''
 
     '''
+    '''Loading files'''
+    weatherDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test0.csv'
+    transitionDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/test222.csv'
+    stationStatusDataLoc = 'C:/Users/Tony Xu/OneDrive/KDD 2/stationStatus.csv'
 
     '''Initialize'''
+    matrixSize = 3003
     [loadDuration, loadStartTime, loadEndTime, loadStartStaionID, loadEndStationID, loadClusterTag] = [0, 1, 2, 3, 5, 6]
 
     '''!!!Do not modify this part!!!'''
@@ -314,6 +306,7 @@ def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDura
     :param stationID: the station we are considering now
     :return: predicted transitions including destination and duration in the whole period that timeStamp is in
     '''
+    matrixSize = 3003
     def get_episodeNum(timeStamp):
         hourEpisodeNum = (timeStamp - startTime) % (3600 * 24) // 3600
         if (hourEpisodeNum >= 7) & (hourEpisodeNum < 11):
@@ -362,23 +355,24 @@ def OModel(timeStamp,stationID,hisInputData,weatherMatrix):
     expectedDepartureTime = timeStamp - timeStamp % 3600 + random.randint(0,59) * 60
     return expectedDepartureNumber,expectedDepartureTime
 
-def get_expectDepartureNumber(timeStamp,stationID):
+def get_expectDepartureNumber(timeStamp,stationID,hisInputDataGlobal, weatherMatrixGlobal):
     expectedDepartureNumber = OModel(timeStamp,stationID, hisInputDataGlobal, weatherMatrixGlobal)
     return expectedDepartureNumber
 
-def get_predictedDestination(timeStamp,stationID):
+def get_predictedDestination(timeStamp,stationID,transitionMatrixDurationGlobal
+                                  , transitionMatrixDetinationGlobal):
     predictedDestination = IModel(timeStamp,stationID, False, 0, transitionMatrixDurationGlobal
                                   , transitionMatrixDetinationGlobal)
     return predictedDestination
 
-def get_predictedDuration(timeStamp,stationID,destinationID):
+def get_predictedDuration(timeStamp,stationID,destinationID,transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal):
     predictedDuration = IModel(timeStamp,stationID, True, destinationID,
                                transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal)
     return predictedDuration
 
 '''
 Input the timeStamp and station ID, then you will get predicted transitions including destination and duration
-'''
+''''''
 time1 = time.time()
 hisInputDataGlobal, transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal, weatherMatrixGlobal = read_inData()
 
@@ -391,4 +385,4 @@ print('Time used:',time2-time1,'s')
 print(expectedDepartureNumber,expectedDepartureTime)
 print(predictedDestination)
 print(predictedDuration)
-
+'''
