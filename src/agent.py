@@ -74,7 +74,7 @@ class DQNAgent(object):
         return np.argmax(act_values[0])  # returns action
 
     def replay(self, batch_size):
-        minibatch = random.sample(self.memory, batch_size)
+        minibatch = random.sample(self.memory, min(batch_size, len(self.memory)))
         for state, action, reward, next_state, done in minibatch:
             target = reward
             if not done:
@@ -127,7 +127,7 @@ class VanillaDQNAgent(object):
         return np.argmax(act_values[0])  # returns action
 
     def replay(self, batch_size):
-        minibatch = random.sample(self.memory, batch_size)
+        minibatch = random.sample(self.memory, min(batch_size, len(self.memory)))
         for state, action, reward, next_state, done in minibatch:
             target = reward
             if not done:
