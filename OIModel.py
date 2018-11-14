@@ -16,7 +16,7 @@ episode1 = [[11,12],[16,17]]
 episode4 = [18,23]'''
 
 
-startTime = 1388505600
+startTime = 1375286400
 matrixSize = 33
 
 def get_timeString(timeStamp):
@@ -43,7 +43,7 @@ def read_inData(transitionDataLoc,weatherDataLoc):
         '''
         dayNum = ((timeStamp - startTime) // (3600 * 24))
         periodNum = int((timeStamp - startTime) // 3600 % 24)
-        if (dayNum % 7 == 5) | (dayNum % 7 == 6):
+        if (dayNum % 7 == 3) | (dayNum % 7 == 2):
             weekdayFlag = False
         else:
             weekdayFlag = True
@@ -70,16 +70,16 @@ def read_inData(transitionDataLoc,weatherDataLoc):
             episodeNum = -1
         return int(episodeNum),periodNum ,weekdayFlag, int(dayNum)
 
-    hisInputData = np.zeros((5,matrixSize,60,5)) # Matrix that records all transitions. 5 * # clusters * # transitions within one certain cluster.
+    hisInputData = np.zeros((5,matrixSize,65,5)) # Matrix that records all transitions. 5 * # clusters * # transitions within one certain cluster.
                       # [[episode][cluster][transitions]]
 
     transitionMatrixDetination = np.zeros((2,5,matrixSize,matrixSize,2)) # Matrix that records transition numbers between 2 certain
 
     transitionMatrixDuration = [] # Matrix that records all transition durations of two certain regions in a certain episode
 
-    weatherMatrix = np.zeros((60,16))
+    weatherMatrix = np.zeros((65,16))
 
-    weatherMatrixAll = np.zeros((60,16,5))
+    weatherMatrixAll = np.zeros((65,16,4))
 
     periodPointer = 8*np.ones(matrixSize)
     dayPointer = np.zeros(matrixSize)
@@ -134,21 +134,21 @@ def read_inData(transitionDataLoc,weatherDataLoc):
                 if (periodNum>=8)&(periodNum<23):
                     if rowWea[5] == '1':
                         weatherMatrix[dayNum][periodNum - 8] = 1 #rain
-                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]),float(rowWea[3]),float(rowWea[4]),float(rowWea[5]),float(rowWea[6])]
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]),float(rowWea[2]),float(rowWea[3]),1]
                     elif rowWea[6] == '1':
-                        weatherMatrix[dayNum][periodNum - 8] = 1  # snow
-                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]), float(rowWea[3]),float(rowWea[4]),float(rowWea[5]),float(rowWea[6])]
+                        weatherMatrix[dayNum][periodNum - 8] = 2 # snow
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]), float(rowWea[2]),float(rowWea[3]),2]
                     elif (rowWea[6] != '1')&(rowWea[5] != '1')&(math.ceil(float(rowWea[4]))<=5):
-                        weatherMatrix[dayNum][periodNum - 8] = 1  # fog
-                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]), float(rowWea[3]),float(rowWea[4]),float(rowWea[5]),float(rowWea[6])]
+                        weatherMatrix[dayNum][periodNum - 8] = 3  # fog
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]),float(rowWea[2]), float(rowWea[3]),3]
                     else:
                         weatherMatrix[dayNum][periodNum - 8] = 0  # sunny
-                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]), float(rowWea[3]),float(rowWea[4]),float(rowWea[5]),float(rowWea[6])]
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]),  float(rowWea[2]),float(rowWea[3]),0]
     #print(hisInputData)
     #print(weatherMatrix)
 
-    entireSituation = np.zeros((60,16))
-    for i in range(60):
+    entireSituation = np.zeros((62,16))
+    for i in range(62):
         for j in range(16):
             if (j+7 >= 7) & (j+7 < 11):
                 episodeNum = 0
@@ -187,12 +187,12 @@ def calculate_similarity(weatherMatrix,nowAttributes,dayNum,periodNum):
         dayNum1 = ((timeStamp - startTime) // (3600 * 24))
         timeStamp2 = timeStamp + dayNum - dayNow
         dayNum2 = ((timeStamp2 - startTime) // (3600 * 24))
-        if (dayNum1 % 7 == 5) | (dayNum1 % 7 == 6):
+        if (dayNum1 % 7 == 3) | (dayNum1 % 7 == 2):
             weekdayFlag1 = False
         else:
             weekdayFlag1 = True
 
-        if (dayNum2 % 7 == 5) | (dayNum2 % 7 == 6):
+        if (dayNum2 % 7 == 2) | (dayNum2 % 7 == 3):
             weekdayFlag2= False
         else:
             weekdayFlag2 = True
@@ -248,7 +248,7 @@ def get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix,overAllTes
         else:
             episodeNum = -1
         dayNow = ((timeStamp - startTime) // (3600 * 24))
-        if (dayNow % 7 == 5) | (dayNow % 7 == 6):
+        if (dayNow % 7 == 3) | (dayNow % 7 == 2):
             weekdayFlag = 0
         else:
             weekdayFlag = 1
@@ -267,10 +267,10 @@ def get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix,overAllTes
     topKPeriod = sorted(similarity,reverse=True,key=lambda x:x[0])
     sumSimilarity = 0
     sumFrequency = 0
-    for i in range(len(topKPeriod)//3):
+    for i in range(10):
         sumSimilarity += topKPeriod[i][0]
         sumFrequency += topKPeriod[i][1]*topKPeriod[i][0]
-    expectedDepartureNumber = int(sumFrequency / sumSimilarity * pred_y[(dayNow-dayNumBound)*16+periodNow])
+    expectedDepartureNumber = int(sumFrequency / sumSimilarity * pred_y[(dayNow-dayNumBound)*16+periodNow-7])
     #print(expectedDepartureNumber)
     return expectedDepartureNumber
 
@@ -301,7 +301,7 @@ def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDura
             episodeNum = -1
         return episodeNum
     dayNum = ((timeStamp - startTime) // (3600 * 24))
-    if (dayNum % 7 == 5) | (dayNum % 7 == 6):
+    if (dayNum % 7 ==2) | (dayNum % 7 ==3):
         weekdayFlagNum = 0
     else:
         weekdayFlagNum = 1
@@ -360,13 +360,17 @@ def predicted_overallSituation(dayNumBound,entireSituation,weatherMatrixAll):
         testReal = []
         for i in range(dayNumBound):
             for j in range(16):
+                if (i%7==2)&(i%7==3):
+                    weekdayFlag = 0
+                else:
+                    weekdayFlag = 1
                 overAllTrain.append([j,weatherMatrixAll[i][j][0],weatherMatrixAll[i][j][1],weatherMatrixAll[i][j][2],
-                                     weatherMatrixAll[i][j][3],weatherMatrixAll[i][j][4]])
+                                     weatherMatrixAll[i][j][3],weekdayFlag])
                 overAllTest.append(entireSituation[i][j])
-        for i in range(dayNumBound,59):
+        for i in range(dayNumBound,61):
             for j in range(16):
                 testData.append([j,weatherMatrixAll[i][j][0],weatherMatrixAll[i][j][1],weatherMatrixAll[i][j][2],
-                                     weatherMatrixAll[i][j][3],weatherMatrixAll[i][j][4]])
+                                     weatherMatrixAll[i][j][3],weekdayFlag])
                 testReal.append(entireSituation[i][j])
         return overAllTrain,overAllTest,testData,testReal
 
@@ -386,7 +390,9 @@ def predicted_overallSituation(dayNumBound,entireSituation,weatherMatrixAll):
     }
     model = xgb.train(xgb_params, dtrain, num_boost_round=5000)
     pred_y = model.predict(dtest)
-    return overAllTest, pred_y, dayNumBound
-''' plt.plot(testReal)
+    '''plt.plot(testReal)
     plt.plot(pred_y)
     plt.show()'''
+    print (sum(abs(testReal-pred_y))/sum(testReal))
+    return overAllTest, pred_y, dayNumBound
+''' '''
