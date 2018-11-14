@@ -63,29 +63,34 @@ def get_episode(df, durations):
 #     return gdf, tdf
 
 
+def get_community(df, community):
+    pass
+
+
 def extract_geo_info(df):
-    gdf = df[['start station id',
-              'start id',
-              'rx1',
-              'ry1']].drop_duplicates()
+    df = df[['start station id',
+             'start id',
+             'rx1',
+             'ry1',
+             'episode',
+             'community']].drop_duplicates()
 
-    gdf.columns = ['sid', 'rid', 'x', 'y']
+    df.columns = ['sid', 'rid', 'x', 'y', 'episode', 'community']
 
-    ldf = pd.read_csv('./stationStatus.csv')
-    ldf.columns = ['sid', 'name', 'limit']
-    del ldf['name']
+    sldf = pd.read_csv('./stationStatus.csv')
+    sldf.columns = ['sid', 'name', 'limit']
+    sldf['limit'] = sldf['limit'].fillna(0)
+    del sldf['name']
 
-    gdf = pd.merge(gdf, ldf, how='left', on='sid')
+    gdf = pd.merge(df, sldf, how='left', on='sid')
 
-    gdf = gdf.groupby('rid').mean().reset_index(level=0)
-
-    gdf['limit'] = gdf['limit'].round()
-
-    gdf = gdf.reset_index(drop=True)
-
-    gdf = gdf.sort_values('rid')
+    rldf = gdf.groupby('rid')[['limit']].sum().reset_index(level=0)
+    gdf = pd.merge(df, rldf, how='left', on='rid')
 
     del gdf['sid']
+
+    gdf = gdf.drop_duplicates()
+    gdf = gdf.sort_values('rid')
 
     return gdf
 
@@ -112,12 +117,16 @@ def main():
 
     os.makedirs('geo', exist_ok=True)
 
-    for ix, episode in enumerate(episodes):
-        df = get_episode(org_df, episode)
+    org_df['community'] = 1
 
-        gdf = extract_geo_info(df)
-
-        gdf.to_csv('geo/{}.csv'.format(ix), index=False)
+    gdfs = []
+    for ei, episode in enumerate(episodes):
+        edf = get_episode(org_df, episode)
+        for ci, cdf in edf.groupby('community'):
+            cdf = cdf.reset_index(drop=True)
+            gdf = extract_geo_info(cdf)
+            gdfs.append(gdf)
+    pd.concat(gdfs).to_csv('geo.csv', index=False)
 
 
 if __name__ == "__main__":

@@ -45,13 +45,11 @@ class RepositionEvent(Event):
 
 class Env(object):
     def __init__(self, simulator,
-                 episode,
                  num_trikes, capacity,
                  rho, delta):
 
         # register variables
         self.simulator = simulator
-        self.episode = episode
         self.num_trikes = num_trikes
         self.capacity = capacity
         self.delta = delta
@@ -108,12 +106,12 @@ class Env(object):
             0.5, 1, self.num_regions) * self.limits)
         self.loss = 0
 
-        t = self.episode[0]
+        tau = self.simulator.start_time
 
         rent_events = [RentEvent(t, r, 1)
-                       for t, r in self.simulator.get_rent_events(self.episode)]
+                       for t, r in self.simulator.rent_events]
 
-        reposition_events = [RepositionEvent(t,
+        reposition_events = [RepositionEvent(tau,
                                              np.random.randint(
                                                  self.num_regions),
                                              0, self.capacity)
@@ -255,7 +253,7 @@ class Env(object):
 
     @property
     def done(self):
-        return self.events[0].t > self.episode[1]
+        return self.events[0].t > self.simulator.end_time
 
     def decode_action(self, action):
         r = action % self.num_regions
