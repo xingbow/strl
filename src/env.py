@@ -46,17 +46,15 @@ class RepositionEvent(Event):
 class Env(object):
     def __init__(self, simulator,
                  num_trikes, capacity,
-                 rho, delta):
-
+                 rho, real=False):
         # register variables
         self.simulator = simulator
         self.num_trikes = num_trikes
         self.capacity = capacity
-        self.delta = delta
+        self.delta = simulator.delta
         self.rho = rho
         self.limits = self.simulator.get_limits()
-        self.num_regions = len(self.limits)
-
+        self.real = real
         # init render
         plt.show(block=False)
 
@@ -69,14 +67,15 @@ class Env(object):
         if np.min(self.loads) <= self.rho:  # deficient
             r = np.argmin(self.loads)
             a = self.cre.b
+            action = self.encode_action(r, a)
             # print('deficient at {}'.format(r))
 
         if np.min(self.limits - self.loads) <= self.rho:  # congested
             r = np.argmin(self.limits - self.loads)
             a = self.capacity - self.cre.b
+            action = self.encode_action(r, a)
             # print('congested at {}'.format(r)) ̰
 
-        action = self.encode_action(r, a)
         return action
 
     def step(self, action):
@@ -103,13 +102,17 @@ class Env(object):
     def reset(self):
         self.cre = None  # current reposition event
         self.loads = np.round(np.random.uniform(
-            0.5, 1, self.num_regions) * self.limits)
+            0.5, 0.5, self.num_regions) * self.limits)
         self.loss = 0
 
         tau = self.simulator.start_time
 
-        rent_events = [RentEvent(t, r, 1)
-                       for t, r in self.simulator.rent_events]
+        if self.real:
+            rent_events = [RentEvent(t, r, 1)
+                           for t, r in self.simulator.query_rent_events()]
+        else:
+            rent_events = [RentEvent(t, r, 1)
+                           for t, r in self.simulator.estimate_rent_events()]
 
         reposition_events = [RepositionEvent(tau,
                                              np.random.randint(
@@ -124,7 +127,9 @@ class Env(object):
         return self._get_obs()
 
     def _increase(self, r, a):
-        assert a >= 0
+        assert 0 <= a
+        assert 0 <= r <= self.num_regions
+
         self.loads[r] += a
         miss = 0
         if self.loads[r] > self.limits[r]:
@@ -133,7 +138,8 @@ class Env(object):
         return miss
 
     def _decrease(self, r, a):
-        assert a >= 0
+        assert 0 <= a
+        assert 0 <= r <= self.num_regions
         self.loads[r] -= a
         miss = 0
         if self.loads[r] < 0:
@@ -141,16 +147,20 @@ class Env(object):
             self.loads[r] = 0
         return miss
 
-    def _register_return_event(self, e: RentEvent, nearest=False):
-        if nearest:
-            r = self.simulator.get_nearest_region(e.r)
+    def _register_likely_return_event(self, e: RentEvent):
+        if self.real:
+            t, r = self.simulator.query_return_event(e.t, e.r)
         else:
-            r = self.simulator.get_likely_destination(e.t, e.r)
-        t = self.simulator.get_bike_arrival_time(e.t, e.r, r)
+            t, r = self.simulator.estimate_return_event(e.t, e.r)
+        self._push_event(ReturnEvent(t=t, r=r, a=e.a))
+
+    def _register_nearest_return_event(self, e: ReturnEvent):
+        r = self.simulator.query_nearest_region(e.r)
+        t = self.simulator.estimate_bike_arrival_time(e.t, e.r, r)
         self._push_event(ReturnEvent(t=t, r=r, a=e.a))
 
     def _register_reposition_event(self, e: RepositionEvent, r, a):
-        e.t = self.simulator.get_trike_arrival_time(e.t, e.r, r)
+        e.t = self.simulator.estimate_trike_arrival_time(e.t, e.r, r)
         e.r = r
         e.a = a
         self._push_event(e)
@@ -172,14 +182,14 @@ class Env(object):
                 reward -= miss
                 self.loss += miss
                 if miss == 0:   # success rent, register return
-                    self._register_return_event(e)
+                    self._register_likely_return_event(e)
 
             if isinstance(e, ReturnEvent):  # bike return
                 miss = self._increase(e.r, e.a)
                 # reward -= miss
-                if miss != 0:  # return failed, register next return
+                if miss != 0:  # return failed, register nearest return
                     e.a = miss
-                    self._register_return_event(e, True)
+                    self._register_nearest_return_event(e)
 
             if isinstance(e, RepositionEvent):
                 assert 0 <= e.b <= self.capacity
@@ -199,14 +209,25 @@ class Env(object):
 
     def render(self):
         plt.clf()
-        plt.bar(range(len(self.loads)), self.loads)
+        # plt.bar(range(len(self.loads)), self.loads)
+        loc = self.simulator.locations
+        x, y = loc[:, 0], loc[:, 1]
+        future_change = -self.future_rent_demands + self.future_return_demands
+        plt.scatter(x=x, y=y, s=self.loads * 3)
+
+        for i in range(self.num_regions):
+            plt.annotate('{:.0f}'.format(self.loads[i]),
+                         loc[i])
+
         plt.pause(1e-3)
 
     def _get_obs(self):
         b1 = np.array(self.loads)
-        b2 = self.future_rent_demands
-        d2 = self.future_return_demands
-        p = self.future_trike_status
+        b2 = 0
+        d2 = 0
+        # b2 = self.future_rent_demands
+        # d2 = self.future_return_demands
+        p = self.trike_status
 
         a = b1 - b2 + d2 + p
         sb = self.current_trike_status
@@ -215,28 +236,35 @@ class Env(object):
 
     @property
     def future_rent_demands(self):
-        maxt = self.tau + self.delta
         o = np.zeros(self.num_regions)
-        for e in self.events:
-            if isinstance(e, RentEvent) and e.t < maxt:
-                o[e.r] += e.a
+        es = self.simulator.estimate_rent_events(
+            [self.tau, self.tau+self.delta])
+        for t, r in es:
+            o[r] += 1
         return o
 
     @property
     def future_return_demands(self):
-        maxt = self.tau + self.delta
         o = np.zeros(self.num_regions)
-        for e in self.events:
-            if isinstance(e, ReturnEvent) and e.t < maxt:
-                o[e.r] += e.a
+        es = self.simulator.estimate_return_events(
+            [self.tau, self.tau+self.delta])
+        for t, r in es:
+            o[r] += 1
         return o
 
     @property
-    def future_trike_status(self):
-        maxt = self.tau + self.delta
+    def reposition_events(self):
+        ret = []
+        for e in self.events:
+            if isinstance(e, RepositionEvent):
+                ret.append(e)
+        return ret
+
+    @property
+    def trike_status(self):
         o = np.zeros(self.num_regions)
         for e in self.events:
-            if isinstance(e, RepositionEvent) and e.t < maxt:
+            if isinstance(e, RepositionEvent):
                 o[e.r] += e.a
         return o
 
@@ -253,16 +281,16 @@ class Env(object):
 
     @property
     def done(self):
-        return self.events[0].t > self.simulator.end_time
+        return self.tau >= self.simulator.end_time
 
     def decode_action(self, action):
-        r = action % self.num_regions
-        a = action // self.num_regions - self.capacity
+        r = int(action % self.num_regions)
+        a = int(action // self.num_regions - self.capacity)
         return r, a
 
     def encode_action(self, r, a):
         action = r + (a + self.capacity) * self.num_regions
-        return action
+        return int(action)
 
     def featurize_action(self, action):
         r, a = self.decode_action(action)
@@ -278,6 +306,9 @@ class Env(object):
     def action_size(self):
         return self.num_regions * (self.capacity * 2 + 1)
 
+    @property
+    def num_regions(self):
+        return len(self.limits)
 
 # def main():
 #     num_regions = 10

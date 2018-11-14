@@ -2,8 +2,12 @@ import numpy as np
 import pandas as pd
 import time
 import OIModel as om
-
+from datetime import datetime
 from collections import defaultdict
+
+
+def parse_timestamp(ts):
+    return datetime.fromtimestamp(ts)
 
 
 def get_episode_duration(ix):
@@ -15,11 +19,13 @@ def get_episode_duration(ix):
         [[18, 23]],
     ]
 
-    base = 1391209200
+    base = 1392825600
     d = durations[ix][0]
 
-    return [base + d[0]*3600,
-            base + d[1]*3600]
+    episode = [base + d[0]*3600,
+               base + d[1]*3600]
+
+    return episode
 
 
 def get_periods(episode):
@@ -33,6 +39,32 @@ def get_periods(episode):
     return periods
 
 
+def extract_geo_info(df):
+    tdf = df[['start station id',
+              'start id',
+              'rx1',
+              'ry1']].drop_duplicates()
+
+    tdf.columns = ['sid', 'rid', 'x', 'y']
+
+    sldf = pd.read_csv('../data/stationStatus.csv')
+    sldf.columns = ['sid', 'name', 'limit']
+    del sldf['name']
+    sldf['limit'] = sldf['limit'].fillna(0)
+
+    sldf = pd.merge(tdf, sldf, how='left', on='sid')
+
+    rldf = sldf.groupby('rid')[['limit']].sum().reset_index(level=0)
+    gdf = pd.merge(tdf, rldf, how='left', on='rid')
+
+    del gdf['sid']
+
+    gdf = gdf.drop_duplicates()
+    gdf = gdf.sort_values('rid')
+
+    return gdf
+
+
 class Simulator(object):
     def _init_interfaces(self, episode, community):
         # type in file loc
@@ -43,33 +75,27 @@ class Simulator(object):
         hisInputData, transitionMatrixDuration, transitionMatrixDestination, weatherMatrix = om.read_inData(
             transitionDataLoc, weatherDataLoc)
 
-        gdf = pd.read_csv('../data/geo.csv')
-        gdf = gdf[(gdf['episode'] == episode) &
-                  (gdf['community'] == community)]
+        tdf = pd.read_csv(transitionDataLoc)
+        tdf['community'] = 1
 
-        gdf = gdf.sort_values('rid')
+        tdf = tdf[(tdf['episode'] == episode) &
+                  (tdf['community'] == community)]
 
-        self.rids = rids = gdf['rid'].values
+        gdf = extract_geo_info(tdf)
+        assert len(gdf['rid'].unique()) == len(gdf['rid'])
+
+        self.rids = rids = gdf['rid'].values.astype(int)
         rid_to_ix = {v: i for i, v in enumerate(rids)}
 
-        points = gdf[['x', 'y']].values
+        tdf['start id'] = tdf['start id'].replace(rid_to_ix)
+        tdf['end id'] = tdf['end id'].replace(rid_to_ix)
+        tdf['end timestamp'] = tdf['start timestamp'] + tdf['tripduration']
 
-        def distance_between(i, j):
-            a = points[i]
-            b = points[j]
-            a, b = map(np.array, [a, b])
-            return np.sum((a - b)**2)**0.5
-
-        self.dist = dist = np.ones([len(rids), len(rids)]) * np.inf
-        for i in range(len(rids)):
-            for j in range(i + 1, len(rids)):
-                dist[i, j] = distance_between(i, j)
-                dist[j, i] = dist[i, j]
-
-        self.limits = gdf['limit']
+        self.periods = get_periods(episode)
 
         def demands(t, i):
             assert 0 <= i < len(rids)
+            t = int(t)
             return om.get_expectDepartureNumber(
                 t, rids[i],
                 hisInputData,
@@ -77,22 +103,64 @@ class Simulator(object):
 
         def destination(t, i):
             assert 0 <= i < len(rids)
-            return rid_to_ix[om.get_predictedDestination(
+            t = int(t)
+            return rid_to_ix[int(om.get_predictedDestination(
                 t, rids[i],
                 transitionMatrixDuration,
-                transitionMatrixDestination)[0]]
+                transitionMatrixDestination))]
 
         def duration(t, i, j):
             assert 0 <= i < len(rids) and 0 <= j < len(rids)
+            t = int(t)
             return om.get_predictedDuration(
                 t, rids[i], rids[j],
                 transitionMatrixDuration,
                 transitionMatrixDestination)
 
+        self.real_rent_events = tdf[['start timestamp',
+                                     'start id']].values.astype(int)
+
+        self.real_return_events = tdf[[
+            'end timestamp', 'end id']].values.astype(int)
+
+        self.real_return_map = {tuple(k): tuple(v)
+                                for k, v in zip(self.real_rent_events,
+                                                self.real_return_events)}
+
+        self.limits = np.round(gdf['limit'].values)
+
+        self.estimated_rent_events = []
+        for r in range(len(self.limits)):
+            ts = demands(self.periods[0][0], r)
+            self.estimated_rent_events += [(t, r) for t in ts]
+
+        self.estimated_return_events = []
+        for t, r in self.estimated_rent_events:
+            r1 = destination(t, r)
+            t1 = duration(t, r, r1)
+            self.estimated_return_events += [(t1, r1)]
+
+        self.estimated_return_map = {tuple(k): tuple(v)
+                                     for k, v in zip(self.estimated_rent_events,
+                                                     self.estimated_return_events)}
+
+        self.locations = locations = gdf[['x', 'y']].values
+
+        def distance_between(i, j):
+            a = locations[i]
+            b = locations[j]
+            a, b = map(np.array, [a, b])
+            return np.sum((a - b)**2)**0.5
+
+        self.dist = dist = np.zeros([len(rids), len(rids)])
+        for i in range(len(rids)):
+            for j in range(i + 1, len(rids)):
+                dist[i, j] = distance_between(i, j)
+                dist[j, i] = dist[i, j]
+
         self._demands = demands
         self._destination = destination
         self._duration = duration
-        self.periods = get_periods(episode)
 
     def __init__(self, episode, community, mu, tr, er):
         self.mu = mu
@@ -101,25 +169,52 @@ class Simulator(object):
 
         self._init_interfaces(episode, community)
 
-    def get_likely_destination(self, t, r):
+    def estimate_likely_destination(self, t, r):
         """
         Needed when generate return event
         """
         return self._destination(t, r)
 
-    def get_bike_arrival_time(self, t, r0, r1):
+    def estimate_bike_arrival_time(self, t, r0, r1):
         """
         Needed when generate return event
         """
         return t + self._duration(t, r0, r1)
 
-    def get_trike_arrival_time(self, t, r0, r1):
+    def estimate_trike_arrival_time(self, t, r0, r1):
         """
         Needed when generate reposition
         """
-        return t + self.get_distance(r0, r1) / self.mu + self.tr + np.random.normal(0, self.er)
+        return t + self.dist[r0, r1] / self.mu + self.tr + np.random.normal(0, self.er)
 
-    def get_nearest_region(self, r):
+    def estimate_rent_events(self, duration=None):
+        """Estimate rent events in the next period
+        Args:
+            period: [a, b] the episode required
+        Returns:
+            [(t, r)]: t is the rent timestamp (continuous), r is the region id
+        """
+        duration = duration or [self.start_time, self.end_time]
+        return [(t, r)
+                for t, r in self.estimated_rent_events
+                if duration[0] <= t < duration[1]]
+
+    def estimate_return_events(self, duration=None):
+        duration = duration or [self.start_time, self.end_time]
+        return [(t, r)
+                for t, r in self.estimated_return_events
+                if duration[0] <= t < duration[1]]
+
+    def estimate_return_event(self, t, r):
+        return self.estimated_return_map[(t, r)]
+
+    def query_rent_events(self):
+        return self.real_rent_events
+
+    def query_return_event(self, t, r):
+        return self.real_return_map[(t, r)]
+
+    def query_nearest_region(self, r):
         """
         Needed when handle the case when the station is full
         Args:
@@ -127,34 +222,12 @@ class Simulator(object):
         Returns:
             nearest region
         """
-        r1 = np.argmin(self.dist[r])
+        r1 = np.argmin(np.delete(self.dist[r], r))
         assert r1 != r
         return r1
 
-    def get_distance(self, r0, r1):
-        """
-        Needed when estimate time for trike reposition
-        """
-        assert 0 <= r0 < len(self.rids) and 0 <= r1 < len(self.rids)
-        return self.dist[r0, r1]
-
     def get_limits(self):
         return self.limits
-
-    @property
-    def rent_events(self):
-        """
-        Args:
-            episode: [a, b] the episode required
-        Returns:
-            [(t, r)]: t is the rent timestamp (continuous), r is the region id
-        """
-        ret = []
-        for period in self.periods:
-            for i in range(len(self.limits)):
-                taus = self._demands(period[0] + 1, i)
-                ret += [(tau, i) for tau in taus]
-        return ret
 
     @property
     def start_time(self):
@@ -163,3 +236,29 @@ class Simulator(object):
     @property
     def end_time(self):
         return self.periods[-1][-1]
+
+    @property
+    def delta(self):
+        return self.periods[0][1] - self.periods[0][0]
+
+
+if __name__ == "__main__":
+    num_trikes = 5
+    capacity = 10
+    num_epochs = 20
+    batch_size = 32
+    rho = 10
+    mu = 200 / 60
+    tr = 60 * 3
+    er = 3 * 60
+
+    config = {
+        "num_epochs": num_epochs,
+        "batch_size": batch_size,
+    }
+
+    simulator = Simulator(episode=1,
+                          community=1,
+                          mu=mu,
+                          tr=tr,
+                          er=er)

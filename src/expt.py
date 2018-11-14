@@ -15,9 +15,9 @@ def run_baseline(env, config):
             # env.render()
             action = env.pruning()
             if action is None:
-                action = [0, 0]
+                action = 0
             _, reward = env.step(action)
-            print(reward)
+            # print(reward)
         losses += [env.loss]
         print('{}/{} loss {}, smooth loss {}'.format(
             epoch, num_epochs,
@@ -86,13 +86,11 @@ def run_dqn(env, config):
         state = create_state()
 
         while not env.done:
-            # if epoch % 10 == 0:
-            #     env.render()
+            env.render()
 
             action = env.pruning()
             if action is None:
                 action = agent.act(state)
-
             observation, reward = env.step(action)
 
             actions.append(action)
@@ -130,6 +128,7 @@ def run_vanilla_pg(env, config):
         state = env.reset()
 
         while not env.done:
+            env.render()
             action = env.pruning()
             if action is None:
                 action = agent.act(state)
@@ -155,13 +154,10 @@ def run_vanilla_pg(env, config):
 
 
 def main():
-    num_regions = 10
     num_trikes = 5
-    episode = [1373964540, 1373964540 + 3600 * 3]
     capacity = 10
     num_epochs = 20
     batch_size = 32
-    delta = 600
     rho = 10
     mu = 200 / 60
     tr = 60 * 3
@@ -172,13 +168,15 @@ def main():
         "batch_size": batch_size,
     }
 
-    simulator = Simulator(mu=mu, tr=tr, er=er)
+    simulator = Simulator(episode=0,
+                          community=1,
+                          mu=mu,
+                          tr=tr,
+                          er=er)
 
     env = Env(simulator=simulator,
-              episode=episode,
               num_trikes=num_trikes,
               capacity=capacity,
-              delta=delta,
               rho=rho)
 
     run_baseline(env, config)
