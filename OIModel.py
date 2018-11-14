@@ -8,11 +8,11 @@ import matplotlib.pyplot as plt
 
 '''
 Define 5 episode
-episode1 = [7,11]
+episode0 = [7,11]
 episode2 = [12,16]
-episode3 = [17,22]
-episode4 = [[11,12],[16,17]]
-episode5 = [22,23]'''
+episode3 = [17,18]
+episode1 = [[11,12],[16,17]]
+episode4 = [18,23]'''
 
 
 startTime = 1391184000 # 2013/7/1 0:00
@@ -53,7 +53,7 @@ def read_inData(transitionDataLoc,weatherDataLoc):
         elif (hourEpisodeNum >= 12) & (hourEpisodeNum < 16):
             episodeNum = 2
             periodNum -= 12
-        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 22):
+        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 18):
             episodeNum = 3
             periodNum -= 17
         elif (hourEpisodeNum >= 11) & (hourEpisodeNum < 12):
@@ -62,9 +62,9 @@ def read_inData(transitionDataLoc,weatherDataLoc):
         elif (hourEpisodeNum >= 16) & (hourEpisodeNum < 17):
             episodeNum = 1
             periodNum -= 17
-        elif (hourEpisodeNum >= 22) & (hourEpisodeNum < 23):
+        elif (hourEpisodeNum >= 18) & (hourEpisodeNum < 23):
             episodeNum = 4
-            periodNum -= 22
+            periodNum -= 18
         else:
             episodeNum = -1
         return int(episodeNum),periodNum ,weekdayFlag, int(dayNum)
@@ -196,18 +196,18 @@ def get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix):
             episodeNum = 2
             periodStrat = 12
             delta = 4
-        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 22):
+        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 18):
             episodeNum = 3
             periodStrat = 17
-            delta = 5
+            delta = 1
         elif ((hourEpisodeNum >= 11) & (hourEpisodeNum < 12)) | (hourEpisodeNum >= 16) & (hourEpisodeNum < 17):
             episodeNum = 1
             periodStrat = 11
-            delta = 6
-        elif (hourEpisodeNum >= 22) & (hourEpisodeNum < 23):
+            delta = 5
+        elif (hourEpisodeNum >= 18) & (hourEpisodeNum < 23):
             episodeNum = 4
-            periodStrat = 22
-            delta = 1
+            periodStrat = 18
+            delta = 5
         else:
             episodeNum = -1
         dayNow = ((timeStamp - startTime) // (3600 * 24))
@@ -251,11 +251,11 @@ def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDura
             episodeNum = 0
         elif (hourEpisodeNum >= 12) & (hourEpisodeNum < 16):
             episodeNum = 2
-        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 22):
+        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 18):
             episodeNum = 3
         elif ((hourEpisodeNum >= 11) & (hourEpisodeNum < 12)) | (hourEpisodeNum >= 16) & (hourEpisodeNum < 17):
             episodeNum = 1
-        elif (hourEpisodeNum >= 22) & (hourEpisodeNum < 23):
+        elif (hourEpisodeNum >= 18) & (hourEpisodeNum < 23):
             episodeNum = 4
         else:
             episodeNum = -1
