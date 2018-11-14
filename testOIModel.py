@@ -17,7 +17,7 @@ hisInputData, transitionMatrixDuration, transitionMatrixDetination, weatherMatri
 # return: expected departure(rent) number of this station in a period(hour)
 timeStamp = 18710507+1372608000
 startStationID = 11
-expectedDepartureNumber = om.get_expectDepartureNumber(timeStamp,startStationID,hisInputData,weatherMatrix)
+expectedDepartureTime = om.get_expectDepartureNumber(timeStamp,startStationID,hisInputData,weatherMatrix)
 
 # Inputs time stamp : e.g. 1373964540
 # Inputs station ID : e.g.212
@@ -25,7 +25,7 @@ expectedDepartureNumber = om.get_expectDepartureNumber(timeStamp,startStationID,
 # return: reference result is the same as predictedDestination except that it uses string time, thus more intuitive
 timeStamp = 18710507+1372608000
 startStationID = 11
-predictedDestination,referenceResult = om.get_predictedDestination(timeStamp,startStationID,transitionMatrixDuration, transitionMatrixDetination,expectedDepartureNumber)
+predictedDestination = om.get_predictedDestination(timeStamp,startStationID,transitionMatrixDuration, transitionMatrixDetination)
 
 # Inputs time stamp : e.g. 1373964540
 # Inputs start station ID : e.g.212
@@ -33,15 +33,15 @@ predictedDestination,referenceResult = om.get_predictedDestination(timeStamp,sta
 # return: expected time used
 timeStamp = 18710507+1372608000
 startStationID = 11
-endStationID = predictedDestination[0][0]
+endStationID = predictedDestination
 predictedDuration = om.get_predictedDuration(timeStamp,startStationID,endStationID ,transitionMatrixDuration, transitionMatrixDetination)
 time2 = time.time()
 
-print('Expected departure numbers of station',startStationID,'is:',expectedDepartureNumber)
-print('..............')
-print('All predicted transitions:')
-for var in referenceResult:
+print('Expected departure time for',startStationID,'is:')
+for var in expectedDepartureTime:
     print(var)
+print('..............')
+print('Expected destination for',startStationID,':',predictedDestination)
 print('..............')
 print('Expected duration for',startStationID,'to',endStationID,':',predictedDuration,'s')
 print('..............')
