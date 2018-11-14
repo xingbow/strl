@@ -12,10 +12,12 @@ def run_baseline(env, config):
     for epoch in range(num_epochs):
         env.reset()
         while not env.done:
+            # env.render()
             action = env.pruning()
             if action is None:
                 action = [0, 0]
-            env.step(action)
+            _, reward = env.step(action)
+            print(reward)
         losses += [env.loss]
         print('{}/{} loss {}, smooth loss {}'.format(
             epoch, num_epochs,
@@ -155,34 +157,34 @@ def run_vanilla_pg(env, config):
 def main():
     num_regions = 10
     num_trikes = 5
-    episode = [0, 3600 * 1]
-    capacity = 5
-    num_epochs = 40
+    episode = [1373964540, 1373964540 + 3600 * 3]
+    capacity = 10
+    num_epochs = 20
     batch_size = 32
     delta = 600
-    rho = 4
+    rho = 10
+    mu = 200 / 60
+    tr = 60 * 3
+    er = 3 * 60
 
     config = {
         "num_epochs": num_epochs,
         "batch_size": batch_size,
     }
 
-    simulator = Simulator('',
-                          '',
-                          num_regions)
+    simulator = Simulator(mu=mu, tr=tr, er=er)
 
     env = Env(simulator=simulator,
               episode=episode,
-              num_regions=num_regions,
               num_trikes=num_trikes,
               capacity=capacity,
               delta=delta,
               rho=rho)
 
-    # run_baseline(env, config)
+    run_baseline(env, config)
     # run_vanilla_dqn(env, config)
-    # run_dqn(env, config)
-    # run_vanilla_pg(env, config)
+    run_dqn(env, config)
+    run_vanilla_pg(env, config)
 
 
 if __name__ == "__main__":
