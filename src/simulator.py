@@ -112,10 +112,19 @@ class Simulator(object):
         def duration(t, i, j):
             assert 0 <= i < len(rids) and 0 <= j < len(rids)
             t = int(t)
-            return om.get_predictedDuration(
-                t, rids[i], rids[j],
-                transitionMatrixDuration,
-                transitionMatrixDestination)
+            try:
+                return om.get_predictedDuration(
+                    t, rids[i], rids[j],
+                    transitionMatrixDuration,
+                    transitionMatrixDestination)
+            except:
+                return 0
+
+        self._demands = demands
+        self._destination = destination
+        self._duration = duration
+
+        tdf = tdf[tdf['end id'].isin(tdf['start id'])]
 
         self.real_rent_events = tdf[['start timestamp',
                                      'start id']].values.astype(int)
@@ -127,22 +136,7 @@ class Simulator(object):
                                 for k, v in zip(self.real_rent_events,
                                                 self.real_return_events)}
 
-        self.limits = np.round(gdf['limit'].values)
-
-        self.estimated_rent_events = []
-        for r in range(len(self.limits)):
-            ts = demands(self.periods[0][0], r)
-            self.estimated_rent_events += [(t, r) for t in ts]
-
-        self.estimated_return_events = []
-        for t, r in self.estimated_rent_events:
-            r1 = destination(t, r)
-            t1 = duration(t, r, r1)
-            self.estimated_return_events += [(t1, r1)]
-
-        self.estimated_return_map = {tuple(k): tuple(v)
-                                     for k, v in zip(self.estimated_rent_events,
-                                                     self.estimated_return_events)}
+        self.limits = np.round(gdf['limit'].values * 0.01)
 
         self.locations = locations = gdf[['x', 'y']].values
 
@@ -158,9 +152,23 @@ class Simulator(object):
                 dist[i, j] = distance_between(i, j)
                 dist[j, i] = dist[i, j]
 
-        self._demands = demands
-        self._destination = destination
-        self._duration = duration
+        self.resample()
+
+    def resample(self):
+        self.estimated_rent_events = []
+        for r in range(len(self.limits)):
+            ts = self._demands(self.periods[0][0], r)
+            self.estimated_rent_events += [(t, r) for t in ts]
+
+        self.estimated_return_events = []
+        for t, r in self.estimated_rent_events:
+            r1 = self._destination(t, r)
+            t1 = t + self._duration(t, r, r1)
+            self.estimated_return_events += [(t1, r1)]
+
+        self.estimated_return_map = {tuple(k): tuple(v)
+                                     for k, v in zip(self.estimated_rent_events,
+                                                     self.estimated_return_events)}
 
     def __init__(self, episode, community, mu, tr, er):
         self.mu = mu
