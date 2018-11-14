@@ -94,28 +94,29 @@ def read_inData(transitionDataLoc,weatherDataLoc):
     transitionCounter = 0 # counting transition (between different pairs of stations) numbers
 
     for rowRec in readerRecord:
-        [episodeNum,periodNum,weekdayFlag,dayNum] = get_attributes(int(rowRec[loadStartTime])+1372608000) # initialize
-        #print(weekdayFlag,dayNum,episodeNum,periodNum)
-        if int(rowRec[loadEndStationID]) <= 33:
-            stationID = int(rowRec[loadStartStaionID])
-            if weekdayFlag == True:
-                weekdayFlagNum = 1
-            else:
-                weekdayFlagNum = 0
+        if rowRec[0] != 'tripduration':
+            [episodeNum,periodNum,weekdayFlag,dayNum] = get_attributes(int(rowRec[loadStartTime])+1372608000) # initialize
+            #print(weekdayFlag,dayNum,episodeNum,periodNum)
+            if int(rowRec[loadEndStationID]) <= 33:
+                stationID = int(rowRec[loadStartStaionID])
+                if weekdayFlag == True:
+                    weekdayFlagNum = 1
+                else:
+                    weekdayFlagNum = 0
 
-            hisInputData[episodeNum][stationID][dayNum][periodNum] += 1
+                hisInputData[episodeNum][stationID][dayNum][periodNum] += 1
 
-                # transition matrix
-            transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0] += 1
-                #print(transitionMatrixDetination[int(rowRec[3])][int(rowRec[5])])
-            if transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0]==1:
-                transitionCounter += 1
-                transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][1] = transitionCounter
-                transitionMatrixDuration.append([])
-                transitionMatrixDuration[-1].append(float(int(rowRec[loadDuration])))
-            else:
-                transitionMatrixDuration[int(transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])]
-                                                 [int(rowRec[loadEndStationID])][1]-1)].append(float(rowRec[loadDuration]))
+                    # transition matrix
+                transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0] += 1
+                    #print(transitionMatrixDetination[int(rowRec[3])][int(rowRec[5])])
+                if transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0]==1:
+                    transitionCounter += 1
+                    transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][1] = transitionCounter
+                    transitionMatrixDuration.append([])
+                    transitionMatrixDuration[-1].append(float(int(rowRec[loadDuration])))
+                else:
+                    transitionMatrixDuration[int(transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])]
+                                                     [int(rowRec[loadEndStationID])][1]-1)].append(float(rowRec[loadDuration]))
 
     #print(hisInputData[1][21][0])
 
@@ -233,7 +234,7 @@ def get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix):
     #print(expectedDepartureNumber)
     return expectedDepartureNumber
 
-def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDuration,transitionMatrixDetination,expectedNumber):
+def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDuration,transitionMatrixDetination):
     '''
     :param timeStamp: now time
     :param expectedDepartureNumber: expected departure bikes
@@ -243,7 +244,7 @@ def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDura
     :return: predicted transitions including destination and duration in the whole period that timeStamp is in
     '''
     destinationOut = []
-    strTime = []
+
     def get_episodeNum(timeStamp):
         hourEpisodeNum = (timeStamp - startTime) % (3600 * 24) // 3600
         if (hourEpisodeNum >= 7) & (hourEpisodeNum < 11):
@@ -271,13 +272,11 @@ def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDura
         if transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID][j][0]!=0:
             for k in range(int(transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID][j][0])):
                 destinationPredict.append(j)
-    for i in range(expectedNumber):
-        predictedTime = (timeStamp - timeStamp % 3600 + random.randint(0, 59) * 60)
-        predictedDestions = destinationPredict[random.randint(0,len(destinationPredict)-1)]
-        destinationOut.append([predictedDestions,predictedTime])
-        strTime.append([predictedDestions,get_timeString(predictedTime)])
+
+    predictedDestions = destinationPredict[random.randint(0,len(destinationPredict)-1)]
+
     if durationFlag==False:
-        return destinationOut,strTime
+        return predictedDestions
     else:
         durationList = transitionMatrixDuration[int(transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID]
                                                                 [destinationIDIn][1]-1)]
@@ -291,20 +290,24 @@ def OModel(timeStamp,stationID,hisInputData,weatherMatrix):
     :param stationID: station(region) ID
     :return: rent events in this time window (with destination and corresponding during info)
     '''
+    strTime = []
     expectedDepartureNumber = get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix) # 0:sunny,1:rain,2:snow,3:fog
-    return expectedDepartureNumber
+    for i in range(expectedDepartureNumber):
+        predictedTime = (timeStamp - timeStamp % 3600 + random.randint(0, 59) * 60)
+        strTime.append(predictedTime)
+    return strTime
 
 def get_expectDepartureNumber(timeStamp,stationID,hisInputDataGlobal, weatherMatrixGlobal):
     expectedDepartureNumber = OModel(timeStamp,stationID, hisInputDataGlobal, weatherMatrixGlobal)
     return expectedDepartureNumber
 
 def get_predictedDestination(timeStamp,stationID,transitionMatrixDurationGlobal
-                                  , transitionMatrixDetinationGlobal,expectedDepartureNumber):
-    predictedDestination,str = IModel(timeStamp,stationID, False, 0, transitionMatrixDurationGlobal
-                                  , transitionMatrixDetinationGlobal,expectedDepartureNumber)
-    return predictedDestination,str
+                                  , transitionMatrixDetinationGlobal):
+    predictedDestination = IModel(timeStamp,stationID, False, 0, transitionMatrixDurationGlobal
+                                  , transitionMatrixDetinationGlobal)
+    return predictedDestination
 
 def get_predictedDuration(timeStamp,stationID,destinationID,transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal):
     predictedDuration= IModel(timeStamp,stationID, True, destinationID,
-                               transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal,1)
+                               transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal)
     return predictedDuration
