@@ -268,12 +268,13 @@ def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDura
     expectedTransition = []
     episodeNum = get_episodeNum(timeStamp)
     destinationPredict = []
+    destinationID = []
+    
     for j in range(matrixSize):
         if transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID][j][0]!=0:
-            for k in range(int(transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID][j][0])):
-                destinationPredict.append(j)
-
-    predictedDestions = destinationPredict[random.randint(0,len(destinationPredict)-1)]
+            destinationPredict.append(int(transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID][j][0]))
+            destinationID.append(j)
+    predictedDestions = np.random.choice(destinationID,1,destinationPredict/sum(destinationPredict))
 
     if durationFlag==False:
         return predictedDestions
