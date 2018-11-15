@@ -38,15 +38,16 @@ class ReturnEvent(Event):
 
 
 class RepositionEvent(Event):
-    def __init__(self, t, r, a, b):
+    def __init__(self, t, r, a, b, i):
         super().__init__(t, r, a)
         self.b = b  # loaded bikes
+        self.i = i
 
 
 class Env(object):
     def __init__(self, simulator,
                  num_trikes, capacity,
-                 rho, real=False):
+                 rho):
         # register variables
         self.simulator = simulator
         self.num_trikes = num_trikes
@@ -54,7 +55,6 @@ class Env(object):
         self.delta = simulator.delta
         self.rho = rho
         self.limits = self.simulator.get_limits()
-        self.real = real
         # init render
         plt.show(block=False)
 
@@ -64,17 +64,19 @@ class Env(object):
         # pruning
         action = None
 
-        if np.min(self.loads) <= self.rho:  # deficient
-            r = np.argmin(self.loads)
-            a = self.cre.b
-            action = self.encode_action(r, a)
-            # print('deficient at {}'.format(r))
+        if max(np.min(self.loads + self.predicted_loads + self.trike_status), 0) <= self.rho:  # deficient
+            if self.cre.b / self.capacity > 0.5:
+                r = np.argmin(self.loads + self.predicted_loads)
+                a = self.cre.b
+                action = self.encode_action(r, a)
+            else:
+                r = np.argmax(self.loads + self.predicted_loads)
+                a = -(self.capacity - self.cre.b)
+                action = self.encode_action(r, a)
 
-        if np.min(self.limits - self.loads) <= self.rho:  # congested
-            r = np.argmin(self.limits - self.loads)
-            a = self.capacity - self.cre.b
-            action = self.encode_action(r, a)
-            # print('congested at {}'.format(r)) ̰
+        if action is not None:
+            pass
+            print('pruning')
 
         return action
 
@@ -94,31 +96,42 @@ class Env(object):
 
         r, a = self.decode_action(action)
 
+        self.trike_loss += [[self.cre.i, self.loss]]
+
         self._register_reposition_event(self.cre, r, a)
         reward = self._process_to_next_reposition_event()
 
         return self._get_obs(), reward
 
+    @property
+    def rewards(self):
+        for i in range(len(self.trike_loss)):
+            for j in range(i + 1, len(self.trike_loss)):
+                if self.trike_loss[i][0] == self.trike_loss[j][0]:
+                    self.trike_loss[i][1] = self.trike_loss[j][1] - self.trike_loss[i][1]
+                    break
+        ret = [-l for _, l in self.trike_loss]
+        assert all(np.array(ret) <= 0)
+        return ret
+
     def reset(self):
         self.cre = None  # current reposition event
-        self.loads = np.round(np.random.uniform(
-            0.5, 0.5, self.num_regions) * self.limits)
+        self.loads = np.round(0.5 * self.limits)
         self.loss = 0
+        self.simulator.resample()
+        self.trike_loss = []
 
         tau = self.simulator.start_time
 
-        if self.real:
-            rent_events = [RentEvent(t, r, 1)
-                           for t, r in self.simulator.query_rent_events()]
-        else:
-            rent_events = [RentEvent(t, r, 1)
-                           for t, r in self.simulator.estimate_rent_events()]
+        rent_events = [RentEvent(t, r, 2)
+                       for t, r in self.simulator.query_rent_events()]
 
         reposition_events = [RepositionEvent(tau,
-                                             np.random.randint(
-                                                 self.num_regions),
-                                             0, self.capacity)
-                             for _ in range(self.num_trikes)]
+                                             0,
+                                             0,
+                                             self.capacity,
+                                             i)
+                             for i in range(self.num_trikes)]
 
         self.events = rent_events + reposition_events
         heapq.heapify(self.events)
@@ -148,10 +161,7 @@ class Env(object):
         return miss
 
     def _register_likely_return_event(self, e: RentEvent):
-        if self.real:
-            t, r = self.simulator.query_return_event(e.t, e.r)
-        else:
-            t, r = self.simulator.estimate_return_event(e.t, e.r)
+        t, r = self.simulator.query_return_event(e.t, e.r)
         self._push_event(ReturnEvent(t=t, r=r, a=e.a))
 
     def _register_nearest_return_event(self, e: ReturnEvent):
@@ -223,16 +233,28 @@ class Env(object):
 
     def _get_obs(self):
         b1 = np.array(self.loads)
-        b2 = 0
-        d2 = 0
-        # b2 = self.future_rent_demands
-        # d2 = self.future_return_demands
+        b2 = self.future_rent_demands
+        d2 = self.future_return_demands
         p = self.trike_status
 
         a = b1 - b2 + d2 + p
         sb = self.current_trike_status
 
         return np.concatenate([a, sb])
+
+    @property
+    def observation2(self):
+        # n + n + n + 1 + n
+        return np.concatenate([self.loads,
+                               self.trike_status,
+                               self.predicted_loads,
+                               self.current_trike_status2])
+
+    @property
+    def predicted_loads(self):
+        a = self.future_rent_demands
+        b = self.future_return_demands
+        return b - a
 
     @property
     def future_rent_demands(self):
@@ -273,6 +295,12 @@ class Env(object):
         o = np.zeros(self.num_regions)
         o[self.cre.r] = 1
         o = np.concatenate([o, [self.cre.a]])
+        return o
+
+    @property
+    def current_trike_status2(self):
+        o = np.zeros(self.num_regions)
+        o[self.cre.r] = self.cre.b
         return o
 
     @property

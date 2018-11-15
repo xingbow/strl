@@ -4,6 +4,8 @@ import time
 import OIModel as om
 from datetime import datetime
 from collections import defaultdict
+import pickle
+import os
 
 
 def parse_timestamp(ts):
@@ -19,7 +21,7 @@ def get_episode_duration(ix):
         [[18, 23]],
     ]
 
-    base = 1392825600
+    base = 1379606400
     d = durations[ix][0]
 
     episode = [base + d[0]*3600,
@@ -71,13 +73,28 @@ class Simulator(object):
         transitionDataLoc = '../data/test.csv'  # transition file
         weatherDataLoc = '../data/weather.csv'  # weather info file
 
-        # Initialize function, no need to modify
-        hisInputData, transitionMatrixDuration, transitionMatrixDestination, weatherMatrix = om.read_inData(
-            transitionDataLoc, weatherDataLoc)
+        startTime = 1375286400  # xingbo bound
+        timeStampBound = 1379606400  # 2013/9/29
+
+        dayNumBound = (timeStampBound - startTime) // (24 * 3600)
+
+        try:
+            with open('../data/tmp.pkl', 'rb') as f:
+                hisInputData, transitionMatrixDuration,\
+                    transitionMatrixDestination, weatherMatrix, \
+                    overAllTest, pred_y, dayNumBound = pickle.load(f)
+        except:
+            with open('../data/tmp.pkl', 'wb') as f:
+                hisInputData, transitionMatrixDuration, transitionMatrixDestination,\
+                    weatherMatrix, entireSituation, weatherMatrixAll\
+                    = om.read_inData(transitionDataLoc, weatherDataLoc)
+                overAllTest, pred_y, dayNumBound = om.predicted_overallSituation(
+                    dayNumBound, entireSituation, weatherMatrixAll)
+                pickle.dump([hisInputData, transitionMatrixDuration,
+                             transitionMatrixDestination, weatherMatrix,
+                             overAllTest, pred_y, dayNumBound], f)
 
         tdf = pd.read_csv(transitionDataLoc)
-        tdf['community'] = 1
-
         tdf = tdf[(tdf['episode'] == episode) &
                   (tdf['community'] == community)]
 
@@ -87,19 +104,17 @@ class Simulator(object):
         self.rids = rids = gdf['rid'].values.astype(int)
         rid_to_ix = {v: i for i, v in enumerate(rids)}
 
+        tdf['start timestamp'] += 1372608000
         tdf['start id'] = tdf['start id'].replace(rid_to_ix)
         tdf['end id'] = tdf['end id'].replace(rid_to_ix)
         tdf['end timestamp'] = tdf['start timestamp'] + tdf['tripduration']
-
-        self.periods = get_periods(episode)
 
         def demands(t, i):
             assert 0 <= i < len(rids)
             t = int(t)
             return om.get_expectDepartureNumber(
-                t, rids[i],
-                hisInputData,
-                weatherMatrix)
+                t, rids[i], hisInputData,
+                weatherMatrix, overAllTest, pred_y, dayNumBound)
 
         def destination(t, i):
             assert 0 <= i < len(rids)
@@ -124,6 +139,12 @@ class Simulator(object):
         self._destination = destination
         self._duration = duration
 
+        tdf = tdf[(tdf['start timestamp'] >= self.start_time)
+                  & (tdf['start timestamp'] < self.end_time)]
+
+        tdf = tdf[(tdf['end timestamp'] >= self.start_time)
+                  & (tdf['end timestamp'] < self.end_time)]
+
         tdf = tdf[tdf['end id'].isin(tdf['start id'])]
 
         self.real_rent_events = tdf[['start timestamp',
@@ -136,7 +157,7 @@ class Simulator(object):
                                 for k, v in zip(self.real_rent_events,
                                                 self.real_return_events)}
 
-        self.limits = np.round(gdf['limit'].values * 0.01)
+        self.limits = np.round(gdf['limit'].values)
 
         self.locations = locations = gdf[['x', 'y']].values
 
@@ -154,26 +175,40 @@ class Simulator(object):
 
         self.resample()
 
-    def resample(self):
-        self.estimated_rent_events = []
-        for r in range(len(self.limits)):
-            ts = self._demands(self.periods[0][0], r)
-            self.estimated_rent_events += [(t, r) for t in ts]
+    def resample(self, scale=5):
+        def sample():
+            rent_events = []
 
-        self.estimated_return_events = []
-        for t, r in self.estimated_rent_events:
-            r1 = self._destination(t, r)
-            t1 = t + self._duration(t, r, r1)
-            self.estimated_return_events += [(t1, r1)]
+            for _ in range(scale):
+                for period in self.periods:
+                    for r in range(len(self.limits)):
+                        ts = self._demands(period[0], r)
+                        rent_events += [(t, r) for t in ts]
 
-        self.estimated_return_map = {tuple(k): tuple(v)
-                                     for k, v in zip(self.estimated_rent_events,
-                                                     self.estimated_return_events)}
+            return_events = []
 
-    def __init__(self, episode, community, mu, tr, er):
+            for t, r in rent_events:
+                r1 = self._destination(t, r)
+                t1 = t + self._duration(t, r, r1)
+                return_events += [(t1, r1)]
+
+            return_map = {tuple(k): tuple(v)
+                          for k, v in zip(rent_events,
+                                          return_events)}
+
+            return rent_events, return_events, return_map
+
+        if not self.real:  # the real data is sampled
+            self.real_rent_events, self.real_return_events, self.real_return_map = sample()
+
+        self.estimated_rent_events, self.estimated_return_events, self.estimated_return_map = sample()
+
+    def __init__(self, episode, community, mu, tr, er, real):
         self.mu = mu
         self.tr = tr
         self.er = er
+        self.periods = get_periods(episode)
+        self.real = real
 
         self._init_interfaces(episode, community)
 
@@ -230,7 +265,9 @@ class Simulator(object):
         Returns:
             nearest region
         """
-        r1 = np.argmin(np.delete(self.dist[r], r))
+        dist = np.array(self.dist[r])
+        dist[r] = np.inf
+        r1 = np.argmin(dist)
         assert r1 != r
         return r1
 
@@ -248,25 +285,3 @@ class Simulator(object):
     @property
     def delta(self):
         return self.periods[0][1] - self.periods[0][0]
-
-
-if __name__ == "__main__":
-    num_trikes = 5
-    capacity = 10
-    num_epochs = 20
-    batch_size = 32
-    rho = 10
-    mu = 200 / 60
-    tr = 60 * 3
-    er = 3 * 60
-
-    config = {
-        "num_epochs": num_epochs,
-        "batch_size": batch_size,
-    }
-
-    simulator = Simulator(episode=1,
-                          community=1,
-                          mu=mu,
-                          tr=tr,
-                          er=er)

@@ -5,33 +5,33 @@ import time
 import math
 import random
 import matplotlib.pyplot as plt
+import xgboost as xgb
 
 '''
 Define 5 episode
-episode1 = [7,11]
+episode0 = [7,11]
 episode2 = [12,16]
-episode3 = [17,22]
-episode4 = [[11,12],[16,17]]
-episode5 = [22,23]'''
+episode3 = [17,18]
+episode1 = [[11,12],[16,17]]
+episode4 = [18,23]'''
 
 
-startTime = 1372608000  # 2013/7/1 0:00
+startTime = 1375286400
+matrixSize = 33
 
 def get_timeString(timeStamp):
     nowTime = datetime.datetime.fromtimestamp(timeStamp)
     timeString = nowTime.strftime("%Y/%m/%d %H:%M:%S")
     return timeString
 
-
-
-def read_inData(transitionDataLoc,stationStatusDataLoc,weatherDataLoc):
+def read_inData(transitionDataLoc,weatherDataLoc):
     '''
 
     '''
 
     '''Initialize'''
-    matrixSize = 3003
-    [loadDuration, loadStartTime, loadEndTime, loadStartStaionID, loadEndStationID, loadClusterTag] = [0, 1, 2, 3, 5, 6]
+
+    [loadDuration, loadStartTime, loadEndTime, loadStartStaionID, loadEndStationID, loadClusterTag] = [0, 7, 2, 10, 11, 6]
 
     '''!!!Do not modify this part!!!'''
     def get_attributes(timeStamp):
@@ -42,35 +42,44 @@ def read_inData(transitionDataLoc,stationStatusDataLoc,weatherDataLoc):
         return period number compared with start time
         '''
         dayNum = ((timeStamp - startTime) // (3600 * 24))
-        if (dayNum % 7 == 5) | (dayNum % 7 == 6):
+        periodNum = int((timeStamp - startTime) // 3600 % 24)
+        if (dayNum % 7 == 3) | (dayNum % 7 == 2):
             weekdayFlag = False
         else:
             weekdayFlag = True
         hourEpisodeNum = (timeStamp - startTime) % (3600 * 24) // 3600
         if (hourEpisodeNum >= 7) & (hourEpisodeNum < 11):
-            episodeNum = 1
+            episodeNum = 0
+            periodNum -= 7
         elif (hourEpisodeNum >= 12) & (hourEpisodeNum < 16):
             episodeNum = 2
-        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 22):
+            periodNum -= 12
+        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 18):
             episodeNum = 3
-        elif ((hourEpisodeNum >= 11) & (hourEpisodeNum < 12)) | (hourEpisodeNum >= 16) & (hourEpisodeNum < 17):
+            periodNum -= 17
+        elif (hourEpisodeNum >= 11) & (hourEpisodeNum < 12):
+            episodeNum = 1
+            periodNum -= 11
+        elif (hourEpisodeNum >= 16) & (hourEpisodeNum < 17):
+            episodeNum = 1
+            periodNum -= 17
+        elif (hourEpisodeNum >= 18) & (hourEpisodeNum < 23):
             episodeNum = 4
-        elif (hourEpisodeNum >= 22) & (hourEpisodeNum < 23):
-            episodeNum = 5
+            periodNum -= 18
         else:
-            episodeNum = 0
-        return int(episodeNum), int((timeStamp - startTime) // 3600 % 24 + 1),weekdayFlag, int(dayNum)
+            episodeNum = -1
+        return int(episodeNum),periodNum ,weekdayFlag, int(dayNum)
 
-    hisInputData = [[] for i in range(matrixSize)] # Matrix that records all transitions. 5 * # clusters * # transitions within one certain cluster.
+    hisInputData = np.zeros((5,matrixSize,65,5)) # Matrix that records all transitions. 5 * # clusters * # transitions within one certain cluster.
                       # [[episode][cluster][transitions]]
 
     transitionMatrixDetination = np.zeros((2,5,matrixSize,matrixSize,2)) # Matrix that records transition numbers between 2 certain
 
     transitionMatrixDuration = [] # Matrix that records all transition durations of two certain regions in a certain episode
 
-    stationStatusMatrix = []
+    weatherMatrix = np.zeros((65,16))
 
-    weatherMatrix = [[0]]
+    weatherMatrixAll = np.zeros((65,16,4))
 
     periodPointer = 8*np.ones(matrixSize)
     dayPointer = np.zeros(matrixSize)
@@ -83,152 +92,131 @@ def read_inData(transitionDataLoc,stationStatusDataLoc,weatherDataLoc):
     fWeather = open(filename)
     readerWeather = csv.reader(fWeather)
 
-    filename = stationStatusDataLoc  # weather data
-    fStatus = open(filename)
-    readerStatus = csv.reader(fStatus)
+
 
     transitionCounter = 0 # counting transition (between different pairs of stations) numbers
 
     for rowRec in readerRecord:
-        [episodeNum,periodNum,weekdayFlag,dayNum] = get_attributes(int(rowRec[loadStartTime])) # initialize
-        #print(weekdayFlag,dayNum,episodeNum,periodNum)
-        if rowRec[loadEndStationID] != 'NULL':
-            if episodeNum != 0:
+        if rowRec[0] != 'tripduration':
+            [episodeNum,periodNum,weekdayFlag,dayNum] = get_attributes(int(rowRec[loadStartTime])+1372608000) # initialize
+            #print(weekdayFlag,dayNum,episodeNum,periodNum)
+            if int(rowRec[loadEndStationID]) <= 33:
                 stationID = int(rowRec[loadStartStaionID])
                 if weekdayFlag == True:
                     weekdayFlagNum = 1
                 else:
                     weekdayFlagNum = 0
 
-                if len(hisInputData[stationID]) == 0:
-                    while dayNum != dayPointer[stationID]:
-                        hisInputData[stationID].append([[], [], [], [], []])
-                        while periodPointer[stationID] != 23:
-                            hisInputData[stationID][int(dayPointer[stationID])][episodeNum - 1].append(
-                                [weekdayFlagNum, 0])
-                            periodPointer[stationID] += 1
-                        periodPointer[stationID] = 8
-                        dayPointer[stationID] += 1
-                    if periodPointer[stationID] == periodNum:
-                        hisInputData[stationID].append([[[weekdayFlagNum, 1]],[],[],[],[]])
-                    else:
-                        hisInputData[stationID].append([[],[],[],[],[]])
-                        while (periodPointer[stationID] != periodNum):
-                            hisInputData[stationID][dayNum][episodeNum-1].append([weekdayFlagNum, 0])
-                            periodPointer[stationID] += 1
-                        hisInputData[stationID][dayNum][episodeNum-1].append([weekdayFlagNum, 1])
+                hisInputData[episodeNum][stationID][dayNum][periodNum] += 1
 
-                elif dayNum != dayPointer[stationID]:
-                    hisInputData[stationID].append([[], [], [], [], []])
-                    if periodPointer[stationID] == 23:
-                        periodPointer[stationID] = 8
-                        dayPointer[stationID] += 1
-                    else:
-                        while periodPointer[stationID] != 23:
-                            hisInputData[stationID][int(dayPointer[stationID])][episodeNum - 1].append(
-                                [weekdayFlagNum, 0])
-                            periodPointer[stationID] += 1
-                        periodPointer[stationID] = 8
-                        dayPointer[stationID] += 1
-                    while dayNum != dayPointer[stationID]:
-                        hisInputData[stationID].append([[], [], [], [], []])
-                        while periodPointer[stationID] != 23:
-                            hisInputData[stationID][int(dayPointer[stationID])][episodeNum - 1].append(
-                                [weekdayFlagNum, 0])
-                            periodPointer[stationID] += 1
-                        periodPointer[stationID] = 8
-                        dayPointer[stationID] += 1
-                    while periodPointer[stationID] != periodNum:
-                        hisInputData[stationID][int(dayPointer[stationID])][episodeNum - 1].append([weekdayFlagNum, 0])
-                        periodPointer[stationID] += 1
-                    hisInputData[stationID][int(dayPointer[stationID])][episodeNum - 1].append([weekdayFlagNum, 1])
-
-                elif periodPointer[stationID] == periodNum:
-                    hisInputData[stationID][dayNum][episodeNum-1][-1][1] += 1
-
-                elif periodPointer[stationID] != periodNum:
-                    if periodPointer[stationID] < periodNum:
-                        periodPointer[stationID] += 1
-                        while periodPointer[stationID] != periodNum:
-                            hisInputData[stationID][dayNum][episodeNum-1].append([weekdayFlagNum, 0])
-                            periodPointer[stationID] += 1
-                        hisInputData[stationID][dayNum][episodeNum-1].append([weekdayFlagNum, 1])
-                    elif periodPointer[stationID] > periodNum:
-                        #print(stationID,periodPointer[stationID],periodNum)
-                        hisInputData[stationID][dayNum][episodeNum-1][periodNum-8][1] += 1
-                    else:
-                        hisInputData[stationID][dayNum][episodeNum-1][-1][1] += 1
-                # transition matrix
-                transitionMatrixDetination[weekdayFlagNum][episodeNum-1][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0] += 1
-                #print(transitionMatrixDetination[int(rowRec[3])][int(rowRec[5])])
-                if transitionMatrixDetination[weekdayFlagNum][episodeNum-1][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0]==1:
+                    # transition matrix
+                transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0] += 1
+                    #print(transitionMatrixDetination[int(rowRec[3])][int(rowRec[5])])
+                if transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][0]==1:
                     transitionCounter += 1
-                    transitionMatrixDetination[weekdayFlagNum][episodeNum-1][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][1] = transitionCounter
+                    transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])][int(rowRec[loadEndStationID])][1] = transitionCounter
                     transitionMatrixDuration.append([])
                     transitionMatrixDuration[-1].append(float(int(rowRec[loadDuration])))
                 else:
-                    transitionMatrixDuration[int(transitionMatrixDetination[weekdayFlagNum][episodeNum-1][int(rowRec[loadStartStaionID])]
-                                                 [int(rowRec[loadEndStationID])][1]-1)].append(float(rowRec[loadDuration]))
+                    transitionMatrixDuration[int(transitionMatrixDetination[weekdayFlagNum][episodeNum][int(rowRec[loadStartStaionID])]
+                                                     [int(rowRec[loadEndStationID])][1]-1)].append(float(rowRec[loadDuration]))
 
-    weatherDayPointer = 0
-    weatherPeriodPointer = 8
+    #print(hisInputData[1][21][0])
+
+    def get_attributesWeather(timeStamp):
+        dayNum = ((timeStamp-startTime) // (3600 * 24))
+        return int((timeStamp - startTime) // 3600 % 24 + 1), int(dayNum)
+
     for rowWea in readerWeather:
-        [episodeNum, periodNum, _, dayNum] = get_attributes(math.ceil(float(rowWea[0])))
-        if episodeNum != 0:
-            if dayNum != weatherDayPointer:
-                weatherMatrix.append([0])
-                weatherDayPointer += 1
-                weatherPeriodPointer = 8
-            if weatherPeriodPointer != periodNum:
-                weatherMatrix[dayNum].append(0)
-                weatherPeriodPointer += 1
-            if rowWea[2] == '1':
-                weatherMatrix[dayNum][periodNum - 8] = 1 #rain
-            elif rowWea[3] == '1':
-                weatherMatrix[dayNum][periodNum - 8] = 2  # snow
-            elif (rowWea[3] != '1')&(rowWea[2] != '1')&(math.ceil(float(rowWea[1]))<=5):
-                weatherMatrix[dayNum][periodNum - 8] = 3  # fog
-            else:
-                weatherMatrix[dayNum][periodNum - 8] = 0  # sunny
+        if rowWea[0]!= 'datetime':
+            if (rowWea[3] != 'NA') & (rowWea[2] != 'NA')&(rowWea[1] != 'NA')&(rowWea[4] != 'NA')&(rowWea[5] != 'NA'):
+                [periodNum, dayNum] = get_attributesWeather(math.ceil(float(rowWea[0])))
+                if (periodNum>=8)&(periodNum<23):
+                    if rowWea[5] == '1':
+                        weatherMatrix[dayNum][periodNum - 8] = 1 #rain
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]),float(rowWea[2]),float(rowWea[3]),1]
+                    elif rowWea[6] == '1':
+                        weatherMatrix[dayNum][periodNum - 8] = 2 # snow
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]), float(rowWea[2]),float(rowWea[3]),2]
+                    elif (rowWea[6] != '1')&(rowWea[5] != '1')&(math.ceil(float(rowWea[4]))<=5):
+                        weatherMatrix[dayNum][periodNum - 8] = 3  # fog
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]),float(rowWea[2]), float(rowWea[3]),3]
+                    else:
+                        weatherMatrix[dayNum][periodNum - 8] = 0  # sunny
+                        weatherMatrixAll[dayNum][periodNum - 8] = [float(rowWea[1]),  float(rowWea[2]),float(rowWea[3]),0]
     #print(hisInputData)
     #print(weatherMatrix)
 
-   #
-    return hisInputData,transitionMatrixDuration,transitionMatrixDetination,weatherMatrix
+    entireSituation = np.zeros((62,16))
+    for i in range(62):
+        for j in range(16):
+            if (j+7 >= 7) & (j+7 < 11):
+                episodeNum = 0
+                periodNum = j+7 - 7
+            elif (j+7 >= 12) & (j+7 < 16):
+                episodeNum = 2
+                periodNum = j + 7 - 12
+            elif (j+7 >= 17) & (j+7 < 18):
+                episodeNum = 3
+                periodNum = j + 7 - 17
+            elif (j+7 >= 11) & (j+7 < 12):
+                episodeNum = 1
+                periodNum = j + 7 - 11
+            elif (j+7 >= 16) & (j+7 < 17):
+                episodeNum = 1
+                periodNum = j + 7 - 17
+            elif (j+7 >= 18) & (j+7 < 23):
+                episodeNum = 4
+                periodNum = j + 7 - 18
+            else:
+                episodeNum = -1
+            for k in range(matrixSize):
+                entireSituation[i][j] += hisInputData[episodeNum][k][i][periodNum]
+    #print(entireSituation)
+    return hisInputData,transitionMatrixDuration,transitionMatrixDetination,weatherMatrix,entireSituation,weatherMatrixAll
 
-def calculate_similarity(weatherMatrix,nowAttributes,dayNum,periodNum,hisInputData):
+
+def calculate_similarity(weatherMatrix,nowAttributes,dayNum,periodNum):
     '''
     :param timeStamp1: time now (period)
     :param timeStamp2: target time (period)
     :param stationID: station(region) ID
     :return: the similarity of period1 and period2 of a certain station
     '''
-    weatherSimilarityMatrix = [[1, 0.1, 0.3, 0.1], [0.1, 1, 0.7, 0.3], [0.3, 0.7, 1, 0.3],
-                               [0.1, 0.3, 0.3, 1]]  # 0:sunny,1:rain,2:snow,3:fog
-    dayNow, periodNow, weekdayFlag = nowAttributes
-    if (hisInputData != 0)&(hisInputData != 1):
-        if hisInputData[0] != weekdayFlag:
-            similarityNum = 0
+    def weatherSame(timeStamp,dayNum,dayNow):
+        dayNum1 = ((timeStamp - startTime) // (3600 * 24))
+        timeStamp2 = timeStamp + dayNum - dayNow
+        dayNum2 = ((timeStamp2 - startTime) // (3600 * 24))
+        if (dayNum1 % 7 == 3) | (dayNum1 % 7 == 2):
+            weekdayFlag1 = False
         else:
-            periodDistance = min(abs(periodNum-periodNow),24-abs(periodNow-periodNum))
-            dayDistance = abs(dayNum - dayNow)
-            timeSimilarity = 0.4**(periodDistance)*0.6**(dayDistance)
-            weatherSimilarity = weatherSimilarityMatrix[weatherMatrix[dayNow][periodNow-7]][weatherMatrix[dayNum][periodNum-7]]
-            similarityNum = timeSimilarity*weatherSimilarity
-        return [similarityNum,hisInputData[1]]
-    else:
-        if  weekdayFlag != hisInputData:
-            similarityNum = 0
-        else:
-            periodDistance = min(abs(periodNum-periodNow),24-abs(periodNow-periodNum))
-            dayDistance = abs(dayNum - dayNow)
-            timeSimilarity = 0.4**(periodDistance)*0.6**(dayDistance)
-            #print(timeSimilarity)
-            weatherSimilarity = weatherSimilarityMatrix[weatherMatrix[dayNow][periodNow-7]][weatherMatrix[dayNum][periodNum-7]]
-            similarityNum = timeSimilarity*weatherSimilarity
-        return [similarityNum,0]
+            weekdayFlag1 = True
 
-def get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix):
+        if (dayNum2 % 7 == 2) | (dayNum2 % 7 == 3):
+            weekdayFlag2= False
+        else:
+            weekdayFlag2 = True
+        if weekdayFlag1 == weekdayFlag2:
+            return 1
+        else:
+            return 0
+
+    weatherSimilarityMatrix = [[1, 0.1, 0.05, 0.1],
+                               [0.1, 1, 0.3, 0.4],
+                               [0.05, 0.3, 1, 0.2],
+                               [0.1, 0.4, 0.2, 1]]  # 0:sunny,1:rain,2:snow,3:fog
+    dayNow, periodNow, weekdayFlag,timeStamp = nowAttributes
+    if weatherSame(timeStamp,dayNum,dayNow)==0:
+        similarityNum = 0
+    else:
+        periodDistance = min(abs(periodNum-periodNow),24-abs(periodNow-periodNum))
+        dayDistance = abs(dayNum - dayNow)
+        weatherSimilarity = weatherSimilarityMatrix[int(weatherMatrix[int(dayNow)][int(periodNow)-7])][int(weatherMatrix[int(dayNum)][int(periodNum)-7])]
+        timeSimilarity = 0.5 ** (periodDistance) *  0.3 ** (dayDistance)
+        similarityNum = timeSimilarity*weatherSimilarity
+    return similarityNum
+
+def get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix,overAllTest,pred_y,dayNumBound):
     '''
     used to find top-k most similar period with time now for a certain station. Here suppose K = 5
     :param timeStamp: # of day, episode, period and time window should be provided
@@ -238,59 +226,51 @@ def get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix):
     def get_nowAttributes(timeStamp):
         hourEpisodeNum = (timeStamp - startTime) % (3600 * 24) // 3600
         if (hourEpisodeNum >= 7) & (hourEpisodeNum < 11):
-            episodeNum = 1
+            episodeNum = 0
+            periodStrat = 7
+            delta = 4
         elif (hourEpisodeNum >= 12) & (hourEpisodeNum < 16):
             episodeNum = 2
-        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 22):
+            periodStrat = 12
+            delta = 4
+        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 18):
             episodeNum = 3
+            periodStrat = 17
+            delta = 1
         elif ((hourEpisodeNum >= 11) & (hourEpisodeNum < 12)) | (hourEpisodeNum >= 16) & (hourEpisodeNum < 17):
+            episodeNum = 1
+            periodStrat = 11
+            delta = 5
+        elif (hourEpisodeNum >= 18) & (hourEpisodeNum < 23):
             episodeNum = 4
-        elif (hourEpisodeNum >= 22) & (hourEpisodeNum < 23):
-            episodeNum = 5
+            periodStrat = 18
+            delta = 5
         else:
-            episodeNum = 0
+            episodeNum = -1
         dayNow = ((timeStamp - startTime) // (3600 * 24))
-        if (dayNow % 7 == 5) | (dayNow % 7 == 6):
+        if (dayNow % 7 == 3) | (dayNow % 7 == 2):
             weekdayFlag = 0
         else:
             weekdayFlag = 1
         periodNow = int((timeStamp - startTime) // 3600 % 24)
-        return dayNow,periodNow,weekdayFlag,episodeNum
+        return dayNow,periodNow,weekdayFlag,episodeNum,periodStrat,delta
+
     similarity = []
-    dayNow, periodNow, weekdayFlag, episodeNum = get_nowAttributes(timeStamp)
-    nowAttributes = [dayNow, periodNow, weekdayFlag]
-    for dayNum in range(dayNow):
-        for periodNum in range(7,7 + 16):
-            if (periodNum >= 7) & (periodNum < 11):
-                episodeNumTemp = 1
-                periodNumTemp = periodNum - 7
-            elif (periodNum >= 12) & (periodNum < 16):
-                episodeNumTemp = 2
-                periodNumTemp = periodNum - 12
-            elif (periodNum >= 17) & (periodNum < 22):
-                episodeNumTemp = 3
-                periodNumTemp = periodNum - 17
-            elif (periodNum >= 11) & (periodNum < 12):
-                episodeNumTemp = 4
-                periodNumTemp = periodNum - 11
-            elif (periodNum >= 16) & (periodNum < 17):
-                episodeNumTemp = 4
-                periodNumTemp = periodNum - 16
-            elif (periodNum >= 22) & (periodNum < 23):
-                episodeNumTemp = 5
-                periodNumTemp = periodNum - 22
-            #print(hisInputData[stationID],dayNum)
-            if len(hisInputData[stationID][dayNum][episodeNumTemp-1])<periodNumTemp+1:
-                similarity.append(calculate_similarity(weatherMatrix,nowAttributes,dayNum,periodNum,hisInputData[stationID][dayNum][0][0][0]))
-            else:
-                similarity.append(calculate_similarity(weatherMatrix,nowAttributes,dayNum,periodNum,hisInputData[stationID][dayNum][episodeNumTemp-1][periodNumTemp]))
+    dayNow, periodNow, weekdayFlag, episodeNum, periodStart,delta = get_nowAttributes(timeStamp)
+    nowAttributes = [dayNow, periodNow, weekdayFlag,timeStamp]
+    for dayNum in range(10):
+        for periodNum in range(periodStart,periodStart+delta):
+            if hisInputData[episodeNum][stationID][dayNum][periodNum-periodStart]!=0:
+                similarity.append([calculate_similarity(weatherMatrix,nowAttributes,dayNum,periodNum)
+                    ,hisInputData[episodeNum][stationID][dayNum][periodNum-periodStart]/overAllTest[dayNum*16+periodNum-7]])
+
     topKPeriod = sorted(similarity,reverse=True,key=lambda x:x[0])
     sumSimilarity = 0
     sumFrequency = 0
-    for i in range(100):
+    for i in range(10):
         sumSimilarity += topKPeriod[i][0]
         sumFrequency += topKPeriod[i][1]*topKPeriod[i][0]
-    expectedDepartureNumber = int(sumFrequency // sumSimilarity)
+    expectedDepartureNumber = int(sumFrequency / sumSimilarity * pred_y[(dayNow-dayNumBound)*16+periodNow-7])
     #print(expectedDepartureNumber)
     return expectedDepartureNumber
 
@@ -303,83 +283,116 @@ def IModel(timeStamp,stationID,durationFlag,destinationIDIn,transitionMatrixDura
     :param stationID: the station we are considering now
     :return: predicted transitions including destination and duration in the whole period that timeStamp is in
     '''
-    matrixSize = 3003
-    expectedDepartureTime = timeStamp - timeStamp % 3600 + random.randint(0, 59) * 60
+    destinationOut = []
+
     def get_episodeNum(timeStamp):
         hourEpisodeNum = (timeStamp - startTime) % (3600 * 24) // 3600
         if (hourEpisodeNum >= 7) & (hourEpisodeNum < 11):
-            episodeNum = 1
+            episodeNum = 0
         elif (hourEpisodeNum >= 12) & (hourEpisodeNum < 16):
             episodeNum = 2
-        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 22):
+        elif (hourEpisodeNum >= 17) & (hourEpisodeNum < 18):
             episodeNum = 3
         elif ((hourEpisodeNum >= 11) & (hourEpisodeNum < 12)) | (hourEpisodeNum >= 16) & (hourEpisodeNum < 17):
+            episodeNum = 1
+        elif (hourEpisodeNum >= 18) & (hourEpisodeNum < 23):
             episodeNum = 4
-        elif (hourEpisodeNum >= 22) & (hourEpisodeNum < 23):
-            episodeNum = 5
         else:
-            episodeNum = 0
+            episodeNum = -1
         return episodeNum
     dayNum = ((timeStamp - startTime) // (3600 * 24))
-    if (dayNum % 7 == 5) | (dayNum % 7 == 6):
+    if (dayNum % 7 ==2) | (dayNum % 7 ==3):
         weekdayFlagNum = 0
     else:
         weekdayFlagNum = 1
     expectedTransition = []
     episodeNum = get_episodeNum(timeStamp)
     destinationPredict = []
+    destinationID = []
     for j in range(matrixSize):
-        if transitionMatrixDetination[weekdayFlagNum][episodeNum-1][stationID][j][0]!=0:
-            for k in range(int(transitionMatrixDetination[weekdayFlagNum][episodeNum-1][stationID][j][0])):
-                destinationPredict.append(j)
+        if transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID][j][0] != 0:
+            destinationPredict.append(int(transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID][j][0]))
+            destinationID.append(j)
+    predictedDestions = np.random.choice(destinationID, 1, p=np.array(destinationPredict) / sum(destinationPredict))
 
-    destinationID = destinationPredict[random.randint(0,len(destinationPredict)-1)]
     if durationFlag==False:
-        return destinationID,expectedDepartureTime
+        return predictedDestions
     else:
-        durationList = transitionMatrixDuration[int(transitionMatrixDetination[weekdayFlagNum][episodeNum-1][stationID]
+        durationList = transitionMatrixDuration[int(transitionMatrixDetination[weekdayFlagNum][episodeNum][stationID]
                                                                 [destinationIDIn][1]-1)]
         durationPrediction = durationList[random.randint(0,len(durationList)-1)]
-        return durationPrediction,expectedDepartureTime
+        return durationPrediction
 
-def OModel(timeStamp,stationID,hisInputData,weatherMatrix):
+def OModel(timeStamp,stationID,hisInputData,weatherMatrix,overAllTest,pred_y,dayNumBound):
     '''
     OModel
     :param timeStamp: # of day, episode, period and time window should be provided
     :param stationID: station(region) ID
     :return: rent events in this time window (with destination and corresponding during info)
     '''
-    expectedDepartureNumber = get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix) # 0:sunny,1:rain,2:snow,3:fog
-    return expectedDepartureNumber
+    strTime = []
+    expectedDepartureNumber = get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix,overAllTest,pred_y,dayNumBound) # 0:sunny,1:rain,2:snow,3:fog
+    for i in range(expectedDepartureNumber):
+        predictedTime = (timeStamp - timeStamp % 3600 + random.randint(0, 59) * 60)
+        strTime.append(predictedTime)
+    return strTime
 
-def get_expectDepartureNumber(timeStamp,stationID,hisInputDataGlobal, weatherMatrixGlobal):
-    expectedDepartureNumber = OModel(timeStamp,stationID, hisInputDataGlobal, weatherMatrixGlobal)
+def get_expectDepartureNumber(timeStamp,stationID,hisInputDataGlobal, weatherMatrixGlobal,overAllTest,pret_y,timeBound):
+    expectedDepartureNumber = OModel(timeStamp,stationID, hisInputDataGlobal, weatherMatrixGlobal,overAllTest,pret_y,timeBound)
     return expectedDepartureNumber
 
 def get_predictedDestination(timeStamp,stationID,transitionMatrixDurationGlobal
                                   , transitionMatrixDetinationGlobal):
-    predictedDestination,expectedDepartureTime = IModel(timeStamp,stationID, False, 0, transitionMatrixDurationGlobal
+    predictedDestination = IModel(timeStamp,stationID, False, 0, transitionMatrixDurationGlobal
                                   , transitionMatrixDetinationGlobal)
-    return predictedDestination,expectedDepartureTime
+    return predictedDestination
 
 def get_predictedDuration(timeStamp,stationID,destinationID,transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal):
-    predictedDuration,expectedDepartureTime = IModel(timeStamp,stationID, True, destinationID,
+    predictedDuration= IModel(timeStamp,stationID, True, destinationID,
                                transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal)
     return predictedDuration
 
-'''
-Input the timeStamp and station ID, then you will get predicted transitions including destination and duration
-''''''
-time1 = time.time()
-hisInputDataGlobal, transitionMatrixDurationGlobal, transitionMatrixDetinationGlobal, weatherMatrixGlobal = read_inData()
+def predicted_overallSituation(dayNumBound,entireSituation,weatherMatrixAll):
+    def overall_sit():
+        overAllTrain = []
+        overAllTest = []
+        testData = []
+        testReal = []
+        for i in range(dayNumBound):
+            for j in range(16):
+                if (i%7==2)&(i%7==3):
+                    weekdayFlag = 0
+                else:
+                    weekdayFlag = 1
+                overAllTrain.append([j,weatherMatrixAll[i][j][0],weatherMatrixAll[i][j][1],weatherMatrixAll[i][j][2],
+                                     weatherMatrixAll[i][j][3],weekdayFlag])
+                overAllTest.append(entireSituation[i][j])
+        for i in range(dayNumBound,61):
+            for j in range(16):
+                testData.append([j,weatherMatrixAll[i][j][0],weatherMatrixAll[i][j][1],weatherMatrixAll[i][j][2],
+                                     weatherMatrixAll[i][j][3],weekdayFlag])
+                testReal.append(entireSituation[i][j])
+        return overAllTrain,overAllTest,testData,testReal
 
-expectedDepartureNumber,expectedDepartureTime = get_expectDepartureNumber(1373964540, 212)
-predictedDestination = get_predictedDestination(1373964540, 212)
-predictedDuration = get_predictedDuration(1373964540, 212, predictedDestination)
-time2 = time.time()
 
-print('Time used:',time2-time1,'s')
-print(expectedDepartureNumber,expectedDepartureTime)
-print(predictedDestination)
-print(predictedDuration)
-'''
+
+    overAllTrain,overAllTest,testData,testReal = overall_sit()
+    dtrain = xgb.DMatrix(overAllTrain, overAllTest)
+    dtest = xgb.DMatrix(testData)
+    xgb_params = {
+        'eta': 0.01,
+        'max_depth': 7,
+        'subsample': 1.0,
+        'colsample_bytree': 1.0,
+        'objective': 'reg:linear',
+        'eval_metric': 'rmse',
+        'silent': 1
+    }
+    model = xgb.train(xgb_params, dtrain, num_boost_round=5000)
+    pred_y = model.predict(dtest)
+    '''plt.plot(testReal)
+    plt.plot(pred_y)
+    plt.show()'''
+    print (sum(abs(testReal-pred_y))/sum(testReal))
+    return overAllTest, pred_y, dayNumBound
+''' '''
