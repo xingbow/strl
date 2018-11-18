@@ -4,7 +4,7 @@ Interfaces with other guys
 import numpy as np
 import pandas as pd
 import time
-import lib.OIModel as om
+import contrib.OIModel as om
 from datetime import datetime
 from collections import defaultdict
 import pickle
@@ -19,8 +19,12 @@ DURATIONS = [
 ]
 
 
+def date_to_timestamp(date):
+    return int(datetime.strptime(date, '%Y/%m/%d').timestamp())
+
+
 def get_episode(date, ep_i):
-    base = datetime.strptime(date).timestamp
+    base = date_to_timestamp(date)
 
     d = DURATIONS[ep_i][0]
     episode = [base + d[0]*3600,
@@ -46,7 +50,7 @@ def zh_interfaces(date):
     weatherDataLoc = '../data/weather.csv'  # weather info file
 
     startTime = 1375286400  # xingbo magic number (timestamp base)
-    timeStampBound = datetime.strptime(date).timestamp
+    timeStampBound = date_to_timestamp(date)
 
     dayNumBound = (timeStampBound - startTime) // (24 * 3600)
 
@@ -209,11 +213,12 @@ def combine_interfaces(date, episode, community):
         "real_rents": real_rents,
         "real_returns": real_returns,
         "real_return_map": real_return_map,
+        "locations": locations,
     }
 
 
 class Simulator(object):
-    def __init__(self, date, episode, community, mu, tr, er, real):
+    def __init__(self, date, episode, community, mu, tr, er, real=True):
         self.I = combine_interfaces(date, episode, community)
         self.mu = mu
         self.tr = tr
@@ -223,16 +228,17 @@ class Simulator(object):
         self.limits = self.I['limits']
         self.num_regions = len(self.limits)
 
-        self._sample()
-
         self._duration = self.I['duration']
         self._demands = self.I['demands']
         self._destination = self.I['destination']
 
+        self.locations = self.I['locations']
         self.distance = self.I['distance']
         self.real_rents = self.I['real_rents']
         self.real_returns = self.I['real_returns']
         self.real_return_map = self.I['real_return_map']
+
+        self.resample()
 
     def _sample_rent_return(self, scale=1):
         # sample rents
@@ -257,7 +263,7 @@ class Simulator(object):
 
         return rents, returns, return_map
 
-    def _sample(self):
+    def resample(self):
         if not self.real:  # the real data is sampled
             self.real_rents, self.real_returns, self.real_return_map\
                 = self._sample_rent_return()
