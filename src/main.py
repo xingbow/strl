@@ -4,7 +4,7 @@ import pandas as pd
 
 from agent import DQNAgent, PGAgent, RandomAgent
 from env import Env
-from contrib.core import Simulator
+from simulator import Simulator
 
 
 from sacred import Experiment
@@ -16,7 +16,7 @@ ex.observers.append(MongoObserver.create())
 
 @ex.config
 def configuration():
-    num_trikes = 5
+    num_trikes = 4
     capacity = 10
     num_epochs = 25
     batch_size = 32
@@ -27,23 +27,25 @@ def configuration():
     real = False
     episode = 0
     community = 1
+    scale = 1
+    date = "2013/08/20"
 
 
 def run(env, agent, num_epochs):
-    num_logs = 1
+    num_renders = 1
     name = agent.__class__.__name__
 
     state = env.reset()
 
-    for epoch in range(1, num_epochs):
+    for epoch in range(0, num_epochs):
         done = False
         state = env.reset()
 
         loss = 0
         while not done:
-            if epoch % (num_epochs // num_logs) == 0:
+            if (epoch + 1) % (num_epochs // num_renders) == 0:
                 pass
-                # env.render()
+                env.render()
 
             action = agent.act(state)
 
@@ -88,7 +90,8 @@ def run_pg_agent(env, _config):
 
 @ex.automain
 def main(_config):
-    simulator = Simulator(date="2013/08/20",
+    simulator = Simulator(date=_config['date'],
+                          scale=_config['scale'],
                           episode=_config['episode'],
                           community=_config['community'],
                           mu=_config['mu'],
@@ -101,6 +104,6 @@ def main(_config):
               capacity=_config['capacity'],
               rho=_config['rho'])
 
-    run_random_agent(env)
+    # run_random_agent(env)
     run_dqn_agent(env)
     run_pg_agent(env)
