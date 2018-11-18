@@ -2,8 +2,7 @@ import numpy as np
 
 
 class ArtificialSimulator(object):
-    def __init__(self, scale, mu, tr, er):
-        self.scale = scale
+    def __init__(self, mu, tr, er):
         self.mu = mu
         self.tr = tr
         self.er = er
@@ -109,7 +108,7 @@ class ArtificialSimulator(object):
 
         rents = vectorize(self.estimated_rents)
         returns = vectorize(self.estimated_rents)
-        
+
         return rents - returns
 
     def query_rents(self):
