@@ -49,8 +49,7 @@ def run(env, agent, num_epochs):
             agent.remember(state, action, reward, next_state)
 
             state = next_state
-
-            loss = env.losses[-1]
+            loss = env.loss
 
         if epoch % (num_epochs // num_logs) == 0:
             print('epoch {}, loss {}'.format(epoch, loss))

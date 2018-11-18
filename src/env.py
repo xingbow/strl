@@ -109,9 +109,9 @@ class Env(object):
 
         # run reposition action
         self.le, loss = self._run_until_next_reposition()
-
         self.losses.append(loss)
-        return self._get_obs(), loss, self.done, None
+        
+        return self._get_obs(), -loss, self.done, None
 
     def _register_action(self, action):
         r1, n = self.decode_action(action)
@@ -176,6 +176,10 @@ class Env(object):
     @property
     def state_size(self):
         return np.prod(self._get_obs().shape)
+
+    @property
+    def loss(self):
+        return np.sum(self.losses)
 
 # ------------------------ observations  ------------------------------------
 
