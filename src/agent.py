@@ -80,7 +80,7 @@ class DQNAgent(DNNAgent):
     def _build_model(self):
         model = Sequential([
             Dense(32, input_dim=self.state_size, activation='relu'),
-            Dense(32, activation='relu'),
+            Dense(32, activation='linear'),
             Dense(self.action_size),
         ])
 
@@ -108,7 +108,7 @@ class DQNAgent(DNNAgent):
             X.append(s)
             Y.append(y)
         X, Y = map(np.array, [X, Y])
-        self.model.fit(X, Y, verbose=0, epochs=5)
+        self.model.fit(X, Y, verbose=1, epochs=5)
 
 
 class PGAgent(DNNAgent):
@@ -166,5 +166,5 @@ class PGAgent(DNNAgent):
         reward = self.discount_rewards(reward)
         reward -= reward.mean()
         reward /= (reward.std() + 1e-10)
-        self.model.fit([state, reward], action, verbose=0, epochs=5)
+        self.model.fit([state, reward], action, verbose=1, epochs=5)
         self.memory = []

@@ -26,7 +26,7 @@ class Env(object):
 
     def reset(self):
         # region
-        self.loads = self.simulator.loads
+        self.loads = np.array(self.simulator.loads).astype(int)
 
         # loss
         self.losses = []
@@ -109,7 +109,7 @@ class Env(object):
         if self.rho < 0:  # pruning off
             return action
 
-        expected = self.loads - self.future_demands - self.other_trikes_status
+        expected = self.expected_bikes
 
         if np.min(expected) <= self.rho:  # deficient
             if self.le['l'] / self.capacity > 0.5:
@@ -209,9 +209,12 @@ class Env(object):
 # ------------------------ observations  ------------------------------------
 
     def _get_obs(self):
-        return np.concatenate([self.loads,
-                               self.future_demands,
-                               self.other_trikes_status,
+        # return np.concatenate([self.loads,
+        #                        self.future_demands,
+        #                        self.other_trikes_status,
+        #                        self.current_trike_status])
+
+        return np.concatenate([self.expected_bikes,
                                self.current_trike_status])
 
     @property
@@ -232,6 +235,10 @@ class Env(object):
         o = np.zeros(self.num_regions)
         o[self.le['r']] = self.le['l']  # at region r with load l
         return o
+
+    @property
+    def expected_bikes(self):
+        return self.loads - self.future_demands - self.other_trikes_status
 
 # ------------------------ action encoding decoding ------------------------
 
