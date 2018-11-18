@@ -17,7 +17,7 @@ ex.observers.append(MongoObserver.create())
 @ex.config
 def configuration():
     num_trikes = 5
-    capacity = 30
+    capacity = 10
     num_epochs = 25
     batch_size = 32
     rho = -1
@@ -30,17 +30,18 @@ def configuration():
 
 
 def run(env, agent, num_epochs):
+    num_logs = 1
     name = agent.__class__.__name__
 
     state = env.reset()
 
-    for epoch in range(num_epochs):
+    for epoch in range(1, num_epochs + 1):
         done = False
         state = env.reset()
 
         loss = 0
         while not done:
-            if epoch % (num_epochs // 5) == 0:
+            if epoch % (num_epochs // num_logs) == 0:
                 env.render()
 
             action = agent.act(state)
@@ -51,7 +52,8 @@ def run(env, agent, num_epochs):
 
             loss = env.losses[-1]
 
-        print('epoch {}, loss {}'.format(epoch, loss))
+        if epoch % (num_epochs // num_logs) == 0:
+            print('epoch {}, loss {}'.format(epoch, loss))
         agent.replay()
         ex.log_scalar('{}.loss'.format(name), loss)
 

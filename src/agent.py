@@ -153,7 +153,7 @@ class PGAgent(DNNAgent):
         return action
 
     def discount_rewards(self, reward):
-        discounted_reward = np.zeros_like(reward)
+        discounted_reward = np.zeros_like(reward, dtype=np.float32)
         running_add = 0
         for t in reversed(range(0, reward.size)):
             running_add = running_add * self.gamma + reward[t]

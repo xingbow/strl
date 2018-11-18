@@ -207,13 +207,14 @@ class Env(object):
 # ------------------------ action encoding decoding ------------------------
 
     def decode_action(self, action):
+        action = int(action)
         r = action % self.num_regions
         n = action // self.num_regions - self.capacity
         return r, n
 
     def encode_action(self, r, n):
         action = r + (n + self.capacity) * self.num_regions
-        return action
+        return int(action)
 
     def featurize_action(self, action):
         r, n = self.decode_action(action)
@@ -226,19 +227,42 @@ class Env(object):
     def _init_renderer(self):
         plt.show(block=False)
 
+    def _trike_position(self, e):
+        loc = self.simulator.locations
+
+        p0 = loc[e['r0']]
+        p1 = loc[e['r']]
+        t0 = e['t0']
+        t1 = e['t']
+
+        p = (p1 - p0) * ((self.tau - t0) / (t1 - t0)) + p0
+        return p0, p1, p
+
+    def _render_trike(self, e):
+        p0, p1, p = self._trike_position(e)
+        plt.plot(*zip(p0, p1), 'b--', lw=0.5)
+        plt.annotate('{}/{}'.format(e['l'], e['n']), p, color='blue')
+        plt.scatter(*p, c='r' if e['n'] > 0 else 'g', s=e['l']*2)
+
     def render(self):
         plt.clf()
         # plt.bar(range(len(self.loads)), self.loads)
 
         loc = self.simulator.locations
         x, y = loc[:, 0], loc[:, 1]
-        plt.scatter(x=x, y=y, s=self.loads * 3)
 
         for i in range(self.num_regions):
             plt.annotate('{:.0f}'.format(self.loads[i]),
                          loc[i])
 
-        plt.pause(1e-3)
+        for t, i in self.events:
+            e = self.history[i]
+            if e['tag'] == 'reposition':
+                self._render_trike(e)
+        self._render_trike(self.le)
+
+        plt.scatter(x=x, y=y, s=self.loads * 3)
+        plt.pause(1e-2)
 
     def replay(self):
         pass
