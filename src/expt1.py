@@ -47,8 +47,6 @@ def run(env, agent, num_epochs):
 
             action = agent.act(state)
 
-            action = env.pruning() or action
-
             next_state, reward, done, _ = env.step(action)
 
             agent.remember(state, action, reward, next_state)
