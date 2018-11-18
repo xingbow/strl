@@ -1,14 +1,15 @@
 import numpy as np
 import heapq
 import matplotlib.pyplot as plt
+import matplotlib
+import os
 
 
 class Env(object):
-    def __init__(self, simulator, capacity, num_trikes, rho, resample):
+    def __init__(self, simulator, capacity, num_trikes, rho):
         self.capacity = capacity
         self.num_trikes = num_trikes
         self.rho = rho
-        self.resample = resample
         self._init_renderer()
 
         self.load(simulator)
@@ -26,9 +27,6 @@ class Env(object):
         self.start_time = simulator.start_time
         self.end_time = simulator.end_time
 
-        if not self.resample:
-            self.simulator.resample()  # resample once
-
     def reset(self):
         # region
         self.loads = np.array(self.simulator.loads).astype(int)
@@ -40,8 +38,7 @@ class Env(object):
         self.events = []    # ordered
         self.history = []   # unordered, to visualize
 
-        if self.resample:
-            self.simulator.resample()  # resample every reset
+        self.simulator.resample()  # resample every reset
 
         for t, r in self.simulator.query_rents():
             self._push_rent_event(t, r, 1)
@@ -312,7 +309,11 @@ class Env(object):
 
     def render(self):
         plt.cla()
-
         self._plot_all()
-
         plt.pause(1e-2)
+
+    def save_frame(self, path):
+        plt.cla()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        self._plot_all()
+        plt.savefig(path)
