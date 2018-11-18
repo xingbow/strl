@@ -20,7 +20,7 @@ def configuration():
     capacity = 10
     num_epochs = 25
     batch_size = 32
-    rho = -1
+    rho = 10
     mu = 200 / 60
     tr = 60 * 3
     er = 3 * 60
@@ -35,24 +35,28 @@ def run(env, agent, num_epochs):
 
     state = env.reset()
 
-    for epoch in range(1, num_epochs + 1):
+    for epoch in range(1, num_epochs):
         done = False
         state = env.reset()
 
         loss = 0
         while not done:
             if epoch % (num_epochs // num_logs) == 0:
-                env.render()
+                pass
+                # env.render()
 
             action = agent.act(state)
+
+            # if pruning mode is on, the env will return some action
+            action = env.pruning() or action
+
             next_state, reward, done, _ = env.step(action)
             agent.remember(state, action, reward, next_state)
 
             state = next_state
             loss = env.loss
 
-        if epoch % (num_epochs // num_logs) == 0:
-            print('epoch {}, loss {}'.format(epoch, loss))
+        print('epoch {}, loss {}'.format(epoch, loss))
         agent.replay()
         ex.log_scalar('{}.loss'.format(name), loss)
 

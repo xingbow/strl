@@ -16,6 +16,7 @@ class Agent(object):
         self.action_size = action_size
         self.batch_size = 128
         self.memory = deque(maxlen=2000)
+        print(self.state_size, self.action_size)
 
     def remember(self, state, action, reward, next_state):
         self.memory.append([state, action, reward, next_state])
@@ -78,8 +79,8 @@ class DQNAgent(DNNAgent):
 
     def _build_model(self):
         model = Sequential([
-            Dense(16, input_dim=self.state_size, activation='relu'),
-            Dense(16, activation='relu'),
+            Dense(32, input_dim=self.state_size, activation='relu'),
+            Dense(32, activation='relu'),
             Dense(self.action_size),
         ])
 
@@ -122,8 +123,8 @@ class PGAgent(DNNAgent):
         advantage = Input([1])
 
         policy_net = Sequential([
-            Dense(16, input_dim=self.state_size, activation='relu'),
-            Dense(16, activation='relu'),
+            Dense(32, input_dim=self.state_size, activation='relu'),
+            Dense(32, activation='relu'),
             Dense(self.action_size, activation='softmax'),
         ])
 

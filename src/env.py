@@ -26,7 +26,7 @@ class Env(object):
 
     def reset(self):
         # region
-        self.loads = np.round(0.5 * self.limits)
+        self.loads = self.simulator.loads
 
         # loss
         self.losses = []
@@ -43,7 +43,7 @@ class Env(object):
         for i in range(self.num_trikes):
             self._push_reposition_event(self.start_time, 0, 0, 0, 0)
 
-        self.le, loss = self._run_until_next_reposition()
+        self.le, _ = self._run_until_next_reposition()
         return self._get_obs()
 
 # ------------------------ event management  ------------------------------------
@@ -103,6 +103,30 @@ class Env(object):
 
 # ------------------------ state update ------------------------------------
 
+    def pruning(self):
+        action = None
+
+        if self.rho < 0:  # pruning off
+            return action
+
+        expected = self.loads - self.future_demands - self.other_trikes_status
+
+        if np.min(expected) <= self.rho:  # deficient
+            if self.le['l'] / self.capacity > 0.5:
+                # find the region with minimal expected bikes
+                r = np.argmin(expected)
+                # unload all
+                n = -self.le['l']
+                action = self.encode_action(r, n)
+            else:
+                # find the region with maximal expected bikes
+                r = np.argmax(expected)
+                # load to full
+                n = (self.capacity - self.le['l'])
+                action = self.encode_action(r, n)
+
+        return action
+
     def step(self, action):
         # register reposition action
         self._register_action(action)
@@ -110,7 +134,7 @@ class Env(object):
         # run reposition action
         self.le, loss = self._run_until_next_reposition()
         self.losses.append(loss)
-        
+
         return self._get_obs(), -loss, self.done, None
 
     def _register_action(self, action):
@@ -151,6 +175,7 @@ class Env(object):
             if e['tag'] == 'reposition':
                 reject = self._update_bikes(e['r'], -e['n'])
                 e['l'] = (e['l'] + e['n'] + reject)
+                e['n'] = 0
                 break
 
         return e, loss
@@ -185,12 +210,12 @@ class Env(object):
 
     def _get_obs(self):
         return np.concatenate([self.loads,
-                               self.demands,
+                               self.future_demands,
                                self.other_trikes_status,
                                self.current_trike_status])
 
     @property
-    def demands(self):
+    def future_demands(self):
         return self.simulator.estimate_demands([self.tau, self.tau + self.delta])
 
     @property
@@ -211,14 +236,13 @@ class Env(object):
 # ------------------------ action encoding decoding ------------------------
 
     def decode_action(self, action):
-        action = int(action)
         r = action % self.num_regions
         n = action // self.num_regions - self.capacity
         return r, n
 
     def encode_action(self, r, n):
         action = r + (n + self.capacity) * self.num_regions
-        return int(action)
+        return action
 
     def featurize_action(self, action):
         r, n = self.decode_action(action)
@@ -245,8 +269,13 @@ class Env(object):
     def _render_trike(self, e):
         p0, p1, p = self._trike_position(e)
         plt.plot(*zip(p0, p1), 'b--', lw=0.5)
-        plt.annotate('{}/{}'.format(e['l'], e['n']), p, color='blue')
-        plt.scatter(*p, c='r' if e['n'] > 0 else 'g', s=e['l']*2)
+        plt.annotate('({}, {})'.format(
+            e['l'], e['n'] + e['l']), p, color='blue')
+
+        c = 'r' if e['n'] > 0 else 'g'
+
+        # plt.scatter(*p, c=c, s=e['l']*2)
+        plt.quiver(*p, *((p1-p0+1) * 5e-3), color=c)
 
     def render(self):
         plt.clf()
@@ -256,7 +285,8 @@ class Env(object):
         x, y = loc[:, 0], loc[:, 1]
 
         for i in range(self.num_regions):
-            plt.annotate('{:.0f}'.format(self.loads[i]),
+            plt.annotate('{}/{}'.format(self.loads[i],
+                                        self.limits[i]),
                          loc[i])
 
         for t, i in self.events:

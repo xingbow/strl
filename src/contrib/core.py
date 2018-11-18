@@ -178,7 +178,7 @@ def combine_interfaces(date, episode, community):
                        for k, v in zip(real_rents,
                                        real_returns)}
 
-    limits = np.round(rdf['limit'].values)
+    limits = np.round(rdf['limit'].values).astype(int)
 
     locations = locations = rdf[['x', 'y']].values
 
@@ -218,7 +218,7 @@ def combine_interfaces(date, episode, community):
 
 
 class Simulator(object):
-    def __init__(self, date, episode, community, mu, tr, er, real=True):
+    def __init__(self, date, episode, community, mu, tr, er, real):
         self.I = combine_interfaces(date, episode, community)
         self.mu = mu
         self.tr = tr
@@ -226,6 +226,8 @@ class Simulator(object):
         self.periods = get_periods(date, episode)
         self.real = real
         self.limits = self.I['limits']
+        self.loads = np.round(0.5 * self.limits).astype(int)
+
         self.num_regions = len(self.limits)
 
         self._duration = self.I['duration']
@@ -240,7 +242,7 @@ class Simulator(object):
 
         self.resample()
 
-    def _sample_rent_return(self, scale=1):
+    def _sample_rent_return(self, scale=10):
         # sample rents
         rents = []
         for _ in range(scale):
