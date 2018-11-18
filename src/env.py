@@ -4,10 +4,11 @@ import matplotlib.pyplot as plt
 
 
 class Env(object):
-    def __init__(self, simulator, capacity, num_trikes, rho):
+    def __init__(self, simulator, capacity, num_trikes, rho, resample):
         self.capacity = capacity
         self.num_trikes = num_trikes
         self.rho = rho
+        self.resample = resample
         self._init_renderer()
 
         self.load(simulator)
@@ -23,6 +24,10 @@ class Env(object):
         self.limits = simulator.limits
         self.delta = simulator.delta
         self.start_time = simulator.start_time
+        self.end_time = simulator.end_time
+
+        if not self.resample:
+            self.simulator.resample()  # resample once
 
     def reset(self):
         # region
@@ -35,7 +40,8 @@ class Env(object):
         self.events = []    # ordered
         self.history = []   # unordered, to visualize
 
-        self.simulator.resample()
+        if self.resample:
+            self.simulator.resample()  # resample every reset
 
         for t, r in self.simulator.query_rents():
             self._push_rent_event(t, r, 1)
@@ -209,13 +215,13 @@ class Env(object):
 # ------------------------ observations  ------------------------------------
 
     def _get_obs(self):
-        # return np.concatenate([self.loads,
-        #                        self.future_demands,
-        #                        self.other_trikes_status,
-        #                        self.current_trike_status])
-
-        return np.concatenate([self.expected_bikes,
+        return np.concatenate([self.loads,
+                               self.future_demands,
+                               self.other_trikes_status,
                                self.current_trike_status])
+
+        # return np.concatenate([self.expected_bikes,
+        #                        self.current_trike_status])
 
     @property
     def future_demands(self):
@@ -273,7 +279,7 @@ class Env(object):
         p = (p1 - p0) * ((self.tau - t0) / (t1 - t0)) + p0
         return p0, p1, p
 
-    def _render_trike(self, e):
+    def _plot_trike(self, e):
         p0, p1, p = self._trike_position(e)
         plt.plot(*zip(p0, p1), 'b--', lw=0.5)
         plt.annotate('({}, {})'.format(
@@ -284,10 +290,7 @@ class Env(object):
         # plt.scatter(*p, c=c, s=e['l']*2)
         plt.quiver(*p, *((p1-p0+1) * 5e-3), color=c)
 
-    def render(self):
-        plt.clf()
-        # plt.bar(range(len(self.loads)), self.loads)
-
+    def _plot_all(self):
         loc = self.simulator.locations
         x, y = loc[:, 0], loc[:, 1]
 
@@ -299,11 +302,17 @@ class Env(object):
         for t, i in self.events:
             e = self.history[i]
             if e['tag'] == 'reposition':
-                self._render_trike(e)
-        self._render_trike(self.le)
+                self._plot_trike(e)
+        self._plot_trike(self.le)
 
         plt.scatter(x=x, y=y, s=self.loads * 3)
-        plt.pause(1e-2)
 
-    def replay(self):
-        pass
+        plt.xlim(np.min(x) - 200, np.max(x) + 200)
+        plt.ylim(np.min(y) - 200, np.max(y) + 200)
+
+    def render(self):
+        plt.cla()
+
+        self._plot_all()
+
+        plt.pause(1e-2)
