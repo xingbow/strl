@@ -215,12 +215,12 @@ class Env(object):
 # ------------------------ observations  ------------------------------------
 
     def _get_obs(self):
-        return np.concatenate([self.loads,
-                               self.future_demands,
-                               self.other_trikes_status,
-                               self.current_trike_status])
+        return np.concatenate([self.loads / self.limits,
+                               self.future_demands / self.limits,
+                               self.other_trikes_status / self.limits,
+                               self.current_trike_status / self.capacity])
 
-        # return np.concatenate([self.expected_bikes,
+        # return np.concatenate([self.expected_bikes / self.limits,
         #                        self.current_trike_status])
 
     @property

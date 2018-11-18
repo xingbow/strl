@@ -3,7 +3,7 @@ from collections import deque
 import random
 
 from tensorflow.keras import Sequential, Input, Model
-from tensorflow.keras.layers import Dense
+from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import RMSprop, Adam
 import tensorflow.keras.backend as K
 
@@ -29,6 +29,24 @@ class Agent(object):
 
     def act(self, state):
         raise NotImplementedError()
+
+
+class DumbAgent(Agent):
+    def __init__(self, state_size, action_size,
+                 alpha=0.5, gamma=0.95,
+                 batch_size=128):
+        super().__init__(state_size, action_size,
+                         alpha=alpha, gamma=gamma,
+                         batch_size=batch_size)
+
+    def remember(self, state, action, reward, next_state):
+        pass
+
+    def replay(self):
+        pass
+
+    def act(self, state):
+        return 0
 
 
 class RandomAgent(Agent):
@@ -80,7 +98,8 @@ class DQNAgent(DNNAgent):
     def _build_model(self):
         model = Sequential([
             Dense(32, input_dim=self.state_size, activation='relu'),
-            Dense(32, activation='linear'),
+            Dense(32, activation='relu'),
+            Dense(32, activation='relu'),
             Dense(self.action_size),
         ])
 
@@ -108,7 +127,7 @@ class DQNAgent(DNNAgent):
             X.append(s)
             Y.append(y)
         X, Y = map(np.array, [X, Y])
-        self.model.fit(X, Y, verbose=1, epochs=5)
+        self.model.fit(X, Y, verbose=1, epochs=10)
 
 
 class PGAgent(DNNAgent):
@@ -122,8 +141,9 @@ class PGAgent(DNNAgent):
     def _build_model(self):
         advantage = Input([1])
 
-        policy_net = Sequential([
+        self.pn = policy_net = Sequential([
             Dense(32, input_dim=self.state_size, activation='relu'),
+            Dense(32, activation='relu'),
             Dense(32, activation='relu'),
             Dense(self.action_size, activation='softmax'),
         ])
@@ -154,7 +174,8 @@ class PGAgent(DNNAgent):
         return action
 
     def discount_rewards(self, reward):
-        discounted_reward = np.zeros_like(reward, dtype=np.float32)
+        reward = reward.astype(np.float64)
+        discounted_reward = np.zeros_like(reward)
         running_add = 0
         for t in reversed(range(0, reward.size)):
             running_add = running_add * self.gamma + reward[t]
@@ -166,5 +187,6 @@ class PGAgent(DNNAgent):
         reward = self.discount_rewards(reward)
         reward -= reward.mean()
         reward /= (reward.std() + 1e-10)
-        self.model.fit([state, reward], action, verbose=1, epochs=5)
+        self.model.fit([state, reward], action, verbose=1, epochs=10)
+        print(self.pn.get_weights())
         self.memory = []

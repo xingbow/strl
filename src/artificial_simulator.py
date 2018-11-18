@@ -9,12 +9,12 @@ class ArtificialSimulator(object):
         self.er = er
         self.periods = [[i * 3600, (i+1) * 3600] for i in range(5)]
 
-        self.num_regions = 5
-        self.expected_demands = np.array([200, 100, 100, 150, 200])
-        self.limits = np.array([100, 150, 200, 250, 300])
+        self.num_regions = 4
+        self.expected_demands = np.array([1, 50, 1, 50])
+        self.limits = np.array([100, 100, 100, 100])
 
         self.locations = np.array([[0, 0], [0, 1000],
-                                   [-500, 500], [1500, 500], [0, 1500]])
+                                   [1000, 1000], [1000, 0]])
 
         self.distance = np.zeros([self.num_regions,
                                   self.num_regions])
