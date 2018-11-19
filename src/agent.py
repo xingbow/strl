@@ -14,7 +14,7 @@ class Agent(object):
         self.gamma = gamma
         self.state_size = state_size
         self.action_size = action_size
-        self.batch_size = 128
+        self.batch_size = batch_size
         self.memory = deque(maxlen=2000)
         print(self.state_size, self.action_size)
 
@@ -90,16 +90,21 @@ class DNNAgent(Agent):
 class DQNAgent(DNNAgent):
     def __init__(self, state_size, action_size,
                  alpha=0.5, gamma=0.95,
-                 eta=1e-2, batch_size=128):
+                 eta=1e-4, batch_size=128):
         super().__init__(state_size, action_size,
                          alpha=alpha, gamma=gamma,
                          eta=eta, batch_size=batch_size)
 
+        self.epsilon = 1.0  # exploration rate
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+
     def _build_model(self):
         model = Sequential([
-            Dense(32, input_dim=self.state_size, activation='relu'),
-            Dense(32, activation='relu'),
-            Dense(32, activation='relu'),
+            Dense(64, input_dim=self.state_size, activation='relu'),
+            Dropout(0.2),
+            Dense(64, activation='linear'),
+            Dropout(0.2),
             Dense(self.action_size),
         ])
 
@@ -109,6 +114,8 @@ class DQNAgent(DNNAgent):
         return model
 
     def act(self, state):
+        if np.random.rand() <= self.epsilon:
+            return np.random.randint(self.action_size)
         state = np.array([state])
         return np.argmax(self.model.predict(state))
 
@@ -128,6 +135,8 @@ class DQNAgent(DNNAgent):
             Y.append(y)
         X, Y = map(np.array, [X, Y])
         self.model.fit(X, Y, verbose=1, epochs=10)
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
 
 
 class PGAgent(DNNAgent):
@@ -142,9 +151,10 @@ class PGAgent(DNNAgent):
         advantage = Input([1])
 
         self.pn = policy_net = Sequential([
-            Dense(32, input_dim=self.state_size, activation='relu'),
-            Dense(32, activation='relu'),
-            Dense(32, activation='relu'),
+            Dense(64, input_dim=self.state_size, activation='relu'),
+            Dropout(0.2),
+            Dense(64, activation='relu'),
+            Dropout(0.2),
             Dense(self.action_size, activation='softmax'),
         ])
 
@@ -188,5 +198,4 @@ class PGAgent(DNNAgent):
         reward -= reward.mean()
         reward /= (reward.std() + 1e-10)
         self.model.fit([state, reward], action, verbose=1, epochs=10)
-        print(self.pn.get_weights())
         self.memory = []
