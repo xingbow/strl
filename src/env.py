@@ -11,7 +11,6 @@ class Env(object):
         self.num_trikes = num_trikes
         self.rho = rho
         self._init_renderer()
-
         self.load(simulator)
         self.reset()
 
@@ -104,6 +103,12 @@ class Env(object):
             'tag': 'reposition'
         })
 
+    def _push_snapshot_event(self, t):
+        self._push_event({
+            't': t,
+            'tag': 'snapshot',
+        })
+
 # ------------------------ state update ------------------------------------
 
     def pruning(self):
@@ -180,6 +185,9 @@ class Env(object):
                 e['l'] = (e['l'] + e['n'] + reject)
                 e['n'] = 0
                 break
+
+            if e['tag'] == 'snapshot':
+                self._snapshot(e['t'])
 
         return e, loss
 
@@ -265,55 +273,67 @@ class Env(object):
     def _init_renderer(self):
         plt.show(block=False)
 
-    def _trike_position(self, e):
+    def _trike_position(self, e, t):
         loc = self.simulator.locations
-
         p0 = loc[e['r0']]
         p1 = loc[e['r']]
         t0 = e['t0']
         t1 = e['t']
 
-        p = (p1 - p0) * ((self.tau - t0) / (t1 - t0)) + p0
+        p = (p1 - p0) * ((t - t0) / (t1 - t0)) + p0
         return p0, p1, p
 
-    def _plot_trike(self, e):
-        p0, p1, p = self._trike_position(e)
+    def _plot_trike(self, e, tau):
+        p0, p1, p = self._trike_position(e, tau)
         plt.plot(*zip(p0, p1), 'b--', lw=0.5)
         plt.annotate('({}, {})'.format(
             e['l'], e['n'] + e['l']), p, color='blue')
 
-        c = 'r' if e['n'] > 0 else 'g'
+        c = 'none' if e['n'] >= 0 else 'r'
 
-        # plt.scatter(*p, c=c, s=e['l']*2)
-        plt.quiver(*p, *((p1-p0+1) * 5e-3), color=c)
+        l, h = plt.xlim()
+        s = (h - l) / 30
+        plt.scatter(*p, s=s, facecolors=c, edgecolors='r')
+        # plt.quiver(*p, *((p1-p0+1) * 5e-3), color=c)
 
-    def _plot_all(self):
+    def _plot_regions(self):
         loc = self.simulator.locations
         x, y = loc[:, 0], loc[:, 1]
-
-        for i in range(self.num_regions):
-            plt.annotate('{}/{}'.format(self.loads[i],
-                                        self.limits[i]),
-                         loc[i])
-
-        for t, i in self.events:
-            e = self.history[i]
-            if e['tag'] == 'reposition':
-                self._plot_trike(e)
-        self._plot_trike(self.le)
-
         plt.scatter(x=x, y=y, s=self.loads * 3)
-
+        for i in range(self.num_regions):
+            s = '{}/{}'.format(self.loads[i],
+                               self.limits[i])
+            plt.annotate(s, loc[i])
         plt.xlim(np.min(x) - 200, np.max(x) + 200)
         plt.ylim(np.min(y) - 200, np.max(y) + 200)
 
+    def _plot(self, tau):
+        self._plot_regions()
+        for _, i in self.events:
+            e = self.history[i]
+            if e['tag'] == 'reposition':
+                self._plot_trike(e, tau)
+        self._plot_trike(self.le, tau)
+
     def render(self):
+        """
+        deprecated, use snapshot instead
+        """
         plt.cla()
-        self._plot_all()
+        self._plot(self.tau)
         plt.pause(1e-2)
 
-    def save_frame(self, path):
+    def _snapshot(self, tau):
         plt.cla()
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        self._plot_all()
+        self._plot(tau)
+        path = os.path.join(self.snapshot_folder,
+                            str(tau) + '.' + self.snapshot_type)
         plt.savefig(path)
+
+    def book_snapshots(self, folder, num_frames=200, type_='png'):
+        ts = np.linspace(self.start_time, self.end_time, num_frames)
+        self.snapshot_folder = folder
+        self.snapshot_type = type_
+        os.makedirs(folder)
+        for t in ts:
+            self._push_snapshot_event(t)
