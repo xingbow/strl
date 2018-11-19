@@ -9,8 +9,7 @@ import tensorflow.keras.backend as K
 
 
 class Agent(object):
-    def __init__(self, state_size, action_size, alpha=0.5, gamma=0.95, batch_size=128):
-        self.alpha = alpha
+    def __init__(self, state_size, action_size, gamma=0.95, batch_size=128):
         self.gamma = gamma
         self.state_size = state_size
         self.action_size = action_size
@@ -32,11 +31,10 @@ class Agent(object):
 
 
 class DumbAgent(Agent):
-    def __init__(self, state_size, action_size,
-                 alpha=0.5, gamma=0.95,
+    def __init__(self, state_size, action_size, gamma=0.95,
                  batch_size=128):
         super().__init__(state_size, action_size,
-                         alpha=alpha, gamma=gamma,
+                         gamma=gamma,
                          batch_size=batch_size)
 
     def remember(self, state, action, reward, next_state):
@@ -54,7 +52,7 @@ class RandomAgent(Agent):
                  alpha=0.5, gamma=0.95,
                  batch_size=128):
         super().__init__(state_size, action_size,
-                         alpha=alpha, gamma=gamma,
+                         gamma=gamma,
                          batch_size=batch_size)
 
     def remember(self, state, action, reward, next_state):
@@ -70,15 +68,30 @@ class RandomAgent(Agent):
 class DNNAgent(Agent):
     def __init__(self, state_size, action_size,
                  alpha=0.5, gamma=0.95,
-                 eta=1e-2, batch_size=128):
+                 eta=1e-2, batch_size=128, hidden_dims=[64, 64]):
         super().__init__(state_size, action_size,
-                         alpha=alpha, gamma=gamma,
+                         gamma=gamma,
                          batch_size=batch_size)
+        self.hidden_dims = hidden_dims
         self.eta = eta
         self.model = self._build_model()
 
     def _build_model(self):
         raise NotImplementedError()
+
+    def _get_dense_layers(self):
+        ret = []
+        for i in range(len(self.hidden_dims)):
+            hidden_dim = self.hidden_dims[i]
+            if i == 0:
+                dense = Dense(hidden_dim,
+                              input_dim=self.state_size,
+                              activation='relu')
+            else:
+                dense = Dense(hidden_dim,
+                              activation='relu')
+            ret.append(dense)
+        return ret
 
     def load(self, name):
         self.model.load_weights(name)
@@ -90,9 +103,9 @@ class DNNAgent(Agent):
 class DQNAgent(DNNAgent):
     def __init__(self, state_size, action_size,
                  alpha=0.5, gamma=0.95,
-                 eta=1e-4, batch_size=128):
+                 eta=1e-2, batch_size=128):
         super().__init__(state_size, action_size,
-                         alpha=alpha, gamma=gamma,
+                         gamma=gamma,
                          eta=eta, batch_size=batch_size)
 
         self.epsilon = 1.0  # exploration rate
@@ -100,16 +113,14 @@ class DQNAgent(DNNAgent):
         self.epsilon_decay = 0.995
 
     def _build_model(self):
-        model = Sequential([
-            Dense(64, input_dim=self.state_size, activation='relu'),
-            Dropout(0.2),
-            Dense(64, activation='linear'),
-            Dropout(0.2),
-            Dense(self.action_size),
+        model = Sequential(self._get_dense_layers() + [
+            Dense(self.action_size, activation='linear'),
         ])
 
         model.compile(loss='mse',
                       optimizer=Adam(self.eta))
+
+        model.summary()
 
         return model
 
@@ -134,7 +145,7 @@ class DQNAgent(DNNAgent):
             X.append(s)
             Y.append(y)
         X, Y = map(np.array, [X, Y])
-        self.model.fit(X, Y, verbose=1, epochs=10)
+        self.model.fit(X, Y, verbose=1, epochs=1)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
@@ -144,17 +155,13 @@ class PGAgent(DNNAgent):
                  alpha=0.5, gamma=0.95,
                  eta=1e-3, batch_size=128):
         super().__init__(state_size, action_size,
-                         alpha=alpha, gamma=gamma,
+                         gamma=gamma,
                          eta=eta, batch_size=batch_size)
 
     def _build_model(self):
         advantage = Input([1])
 
-        self.pn = policy_net = Sequential([
-            Dense(64, input_dim=self.state_size, activation='relu'),
-            Dropout(0.2),
-            Dense(64, activation='relu'),
-            Dropout(0.2),
+        policy_net = Sequential(self._get_dense_layers() + [
             Dense(self.action_size, activation='softmax'),
         ])
 
@@ -171,6 +178,8 @@ class PGAgent(DNNAgent):
 
         model.compile(loss=loss,
                       optimizer=RMSprop(self.eta))
+
+        model.summary()
 
         return model
 
@@ -197,5 +206,5 @@ class PGAgent(DNNAgent):
         reward = self.discount_rewards(reward)
         reward -= reward.mean()
         reward /= (reward.std() + 1e-10)
-        self.model.fit([state, reward], action, verbose=1, epochs=10)
+        self.model.fit([state, reward], action, verbose=1, epochs=1)
         self.memory = []
