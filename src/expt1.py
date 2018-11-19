@@ -20,7 +20,7 @@ ex.observers.append(MongoObserver.create())
 def configuration():
     num_trikes = 3
     capacity = 10
-    num_epochs = 300
+    num_epochs = 400
     batch_size = 128
     rho = -1
     mu = 30 / 3.6  # 30km/h
@@ -31,21 +31,22 @@ def configuration():
 def run(env, agent, num_epochs):
     name = agent.__class__.__name__
 
+    snapshot_epochs = [0, num_epochs // 2, num_epochs - 1]
+
     state = env.reset()
 
     for epoch in range(num_epochs):
         done = False
         state = env.reset()
 
-        frame = 0
-        while not done:
-            if epoch == 0 or epoch == num_epochs - 1:
-                # env.render()
-                env.save_frame(
-                    '../fig/{}-{}/{}.svg'.format(name, epoch, frame))
-                frame += 1
+        if epoch in snapshot_epochs:
+            snapshots_path = '../fig/{}-{}/'.format(name, epoch)
+            # env.book_snapshots(snapshots_path, 200)
 
+        while not done:
             action = agent.act(state)
+
+            env.render()
 
             next_state, reward, done, _ = env.step(action)
 
@@ -104,7 +105,7 @@ def main(_config):
               capacity=_config['capacity'],
               rho=_config['rho'])
 
-    run_dumb_agent(env)
+    # run_dumb_agent(env)
     run_random_agent(env)
-    run_pg_agent(env)
-    run_dqn_agent(env)
+    # run_pg_agent(env)
+    # run_dqn_agent(env)
