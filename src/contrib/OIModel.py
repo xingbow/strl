@@ -16,7 +16,7 @@ episode1 = [[11,12],[16,17]]
 episode4 = [18,23]'''
 
 
-startTime = 1375286400
+startTime = 1375315200
 matrixSize = 33
 
 def get_timeString(timeStamp):
@@ -98,7 +98,7 @@ def read_inData(transitionDataLoc,weatherDataLoc):
 
     for rowRec in readerRecord:
         if rowRec[0] != 'tripduration':
-            [episodeNum,periodNum,weekdayFlag,dayNum] = get_attributes(int(rowRec[loadStartTime])+1372608000) # initialize
+            [episodeNum,periodNum,weekdayFlag,dayNum] = get_attributes(int(rowRec[loadStartTime])+1372636800) # initialize
             #print(weekdayFlag,dayNum,episodeNum,periodNum)
             if int(rowRec[loadEndStationID]) <= 33:
                 stationID = int(rowRec[loadStartStaionID])
