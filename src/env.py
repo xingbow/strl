@@ -295,9 +295,9 @@ class Env(object):
         p1 = self.locations[e['r']]
         t0 = e['t0']
         t1 = e['t']
-        p = (p1 - p0) * ((t - t0) / (t1 - t0)) + p0
+        p = (p1 - p0) * (max((t - t0), 0) / (t1 - t0)) + p0
         return p0, p1, p
-        
+
     def _snapshot(self, tau):
         frame = {
             "timestamp": tau,
@@ -311,18 +311,13 @@ class Env(object):
             if e['tag'] == 'reposition':
                 p0, p1, p = self._trike_position(e, tau)
                 trike = {
-                    "x": p[0],
-                    "y": p[1],
-                    "bike_to_load": e['n'],
-                    "bike_loaded": e['l'],
-                    "src_x": p0[0],
-                    "src_y": p0[1],
-                    "dst_x": p1[0],
-                    "dst_y": p1[1],
-                    "src": e['r0'],
-                    "dst": e['r'],
-                    "src_t": e['t0'],
-                    "dst_t": e['t'],
+                    "p": p.tolist(),
+                    "p0": p0.tolist(),
+                    "p1": p1.tolist(),
+                    "to_load": e['n'],
+                    "loaded": e['l'],
+                    "t0": e['t0'],
+                    "t1": e['t'],
                     "id": e['i'],
                 }
                 frame["trikes"].append(trike)
@@ -330,10 +325,9 @@ class Env(object):
         # add regions
         for i in range(self.num_regions):
             region = {
-                "x": self.locations[i][0],
-                "y": self.locations[i][1],
+                "p": self.locations[i].tolist(),
                 "id": i,
-                "bike": self.loads[i],
+                "loaded": self.loads[i],
                 "capacity": self.limits[i],
             }
             frame["regions"].append(region)
