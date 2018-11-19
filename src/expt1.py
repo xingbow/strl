@@ -42,7 +42,7 @@ def run(env, agent, num_epochs):
 
         if epoch in snapshot_epochs:
             snapshots_path = '../fig/{}-{}/'.format(name, epoch)
-            # env.book_snapshots(snapshots_path, 200)
+            env.book_snapshots(snapshots_path, 200)
 
         while not done:
             action = agent.act(state)
@@ -106,7 +106,7 @@ def main(_config):
               capacity=_config['capacity'],
               rho=_config['rho'])
 
-    # run_dumb_agent(env)
-    # run_random_agent(env)
+    run_dumb_agent(env)
+    run_random_agent(env)
     run_pg_agent(env)
     run_dqn_agent(env)
