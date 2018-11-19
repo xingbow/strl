@@ -220,12 +220,13 @@ class Env(object):
 # ------------------------ observations  ------------------------------------
 
     def _get_obs(self):
-        return np.concatenate([self.loads / self.limits,
-                               self.future_demands / self.limits,
-                               self.other_trikes_status / self.limits,
+        max_limit = np.max(self.limits)
+        return np.concatenate([self.loads / max_limit,
+                               self.future_demands / max_limit,
+                               self.other_trikes_status / max_limit,
                                self.current_trike_status / self.capacity])
 
-        # return np.concatenate([self.expected_bikes / self.limits,
+        # return np.concatenate([self.expected_bikes / max_limit,
         #                        self.current_trike_status])
 
     @property
@@ -334,6 +335,6 @@ class Env(object):
         ts = np.linspace(self.start_time, self.end_time, num_frames)
         self.snapshot_folder = folder
         self.snapshot_type = type_
-        os.makedirs(folder)
+        os.makedirs(folder, exist_ok=True)
         for t in ts:
             self._push_snapshot_event(t)
