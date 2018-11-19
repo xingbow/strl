@@ -1,8 +1,19 @@
 import numpy as np
 import heapq
-import matplotlib.pyplot as plt
-import matplotlib
 import os
+import json
+
+
+def default(o):
+    if isinstance(o, np.int64):
+        return int(o)
+    if isinstance(o, np.int32):
+        return int(o)
+    if isinstance(o, np.float32):
+        return float(o)
+    if isinstance(o, np.float64):
+        return float(o)
+    raise TypeError(type(o), o)
 
 
 class Env(object):
@@ -10,7 +21,6 @@ class Env(object):
         self.capacity = capacity
         self.num_trikes = num_trikes
         self.rho = rho
-        self._init_renderer()
         self.load(simulator)
         self.reset()
 
@@ -25,6 +35,7 @@ class Env(object):
         self.delta = simulator.delta
         self.start_time = simulator.start_time
         self.end_time = simulator.end_time
+        self.locations = self.simulator.locations
 
     def reset(self):
         # region
@@ -43,7 +54,7 @@ class Env(object):
             self._push_rent_event(t, r, 1)
 
         for i in range(self.num_trikes):
-            self._push_reposition_event(self.start_time, 0, 0, 0, 0)
+            self._push_reposition_event(self.start_time, 0, 0, 0, 0, i)
 
         self.le, _ = self._run_until_next_reposition()
         return self._get_obs()
@@ -86,7 +97,7 @@ class Env(object):
             'tag': 'return'
         })
 
-    def _push_reposition_event(self, t0, r0, r1, n, l):
+    def _push_reposition_event(self, t0, r0, r1, n, l, i):
         if n + l > self.capacity:   # attempt to load too much
             n = self.capacity - l   # load just to full
         if n + l < 0:               # attempt to unload too much
@@ -100,6 +111,7 @@ class Env(object):
             'r0': r0,
             'n': n,  # delta bikes
             'l': l,  # loads
+            'i': i,
             'tag': 'reposition'
         })
 
@@ -148,7 +160,7 @@ class Env(object):
     def _register_action(self, action):
         r1, n = self.decode_action(action)
         t0, r0, l = (self.le[k] for k in ['t', 'r', 'l'])
-        self._push_reposition_event(t0, r0, r1, n, l)
+        self._push_reposition_event(t0, r0, r1, n, l, self.le['i'])
 
     def _update_bikes(self, r, n):
         self.loads[r] += n
@@ -252,6 +264,7 @@ class Env(object):
     def expected_bikes(self):
         return self.loads - self.future_demands - self.other_trikes_status
 
+
 # ------------------------ action encoding decoding ------------------------
 
     def decode_action(self, action):
@@ -271,70 +284,70 @@ class Env(object):
 
 #  ------------------------ render ------------------------
 
-    def _init_renderer(self):
-        plt.show(block=False)
-
-    def _trike_position(self, e, t):
-        loc = self.simulator.locations
-        p0 = loc[e['r0']]
-        p1 = loc[e['r']]
-        t0 = e['t0']
-        t1 = e['t']
-
-        p = (p1 - p0) * ((t - t0) / (t1 - t0)) + p0
-        return p0, p1, p
-
-    def _plot_trike(self, e, tau):
-        p0, p1, p = self._trike_position(e, tau)
-        plt.plot(*zip(p0, p1), 'b--', lw=0.5)
-        plt.annotate('({}, {})'.format(
-            e['l'], e['n'] + e['l']), p, color='blue')
-
-        c = 'none' if e['n'] >= 0 else 'r'
-
-        l, h = plt.xlim()
-        s = (h - l) / 30
-        plt.scatter(*p, s=s, facecolors=c, edgecolors='r')
-        # plt.quiver(*p, *((p1-p0+1) * 5e-3), color=c)
-
-    def _plot_regions(self):
-        loc = self.simulator.locations
-        x, y = loc[:, 0], loc[:, 1]
-        plt.scatter(x=x, y=y, s=self.loads * 3)
-        for i in range(self.num_regions):
-            s = '{}/{}'.format(self.loads[i],
-                               self.limits[i])
-            plt.annotate(s, loc[i])
-        plt.xlim(np.min(x) - 200, np.max(x) + 200)
-        plt.ylim(np.min(y) - 200, np.max(y) + 200)
-
-    def _plot(self, tau):
-        self._plot_regions()
-        for _, i in self.events:
-            e = self.history[i]
-            if e['tag'] == 'reposition':
-                self._plot_trike(e, tau)
-        self._plot_trike(self.le, tau)
-
     def render(self):
         """
         deprecated, use snapshot instead
         """
-        plt.cla()
-        self._plot(self.tau)
-        plt.pause(1e-2)
+        pass
 
+    def _trike_position(self, e, t):
+        p0 = self.locations[e['r0']]
+        p1 = self.locations[e['r']]
+        t0 = e['t0']
+        t1 = e['t']
+        p = (p1 - p0) * ((t - t0) / (t1 - t0)) + p0
+        return p0, p1, p
+        
     def _snapshot(self, tau):
-        plt.cla()
-        self._plot(tau)
-        path = os.path.join(self.snapshot_folder,
-                            str(tau) + '.' + self.snapshot_type)
-        plt.savefig(path)
+        frame = {
+            "timestamp": tau,
+            "regions": [],
+            "trikes": []
+        }
 
-    def book_snapshots(self, folder, num_frames=200, type_='png'):
+        # add trikes
+        for _, i in self.events:
+            e = self.history[i]
+            if e['tag'] == 'reposition':
+                p0, p1, p = self._trike_position(e, tau)
+                trike = {
+                    "x": p[0],
+                    "y": p[1],
+                    "bike_to_load": e['n'],
+                    "bike_loaded": e['l'],
+                    "src_x": p0[0],
+                    "src_y": p0[1],
+                    "dst_x": p1[0],
+                    "dst_y": p1[1],
+                    "src": e['r0'],
+                    "dst": e['r'],
+                    "src_t": e['t0'],
+                    "dst_t": e['t'],
+                    "id": e['i'],
+                }
+                frame["trikes"].append(trike)
+
+        # add regions
+        for i in range(self.num_regions):
+            region = {
+                "x": self.locations[i][0],
+                "y": self.locations[i][1],
+                "id": i,
+                "bike": self.loads[i],
+                "capacity": self.limits[i],
+            }
+            frame["regions"].append(region)
+
+        self.snapshot_frames.append(frame)
+        if len(self.snapshot_frames) == self.snapshot_num_frames:
+            with open(self.snapshot_path, 'w') as f:
+                json.dump(self.snapshot_frames, f, default=default)
+
+    def register_snapshots(self, path, num_frames=200):
         ts = np.linspace(self.start_time, self.end_time, num_frames)
-        self.snapshot_folder = folder
-        self.snapshot_type = type_
-        os.makedirs(folder, exist_ok=True)
+        self.snapshot_path = path
+        self.snapshot_frames = []
+        self.snapshot_num_frames = num_frames
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         for t in ts:
             self._push_snapshot_event(t)
