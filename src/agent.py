@@ -132,7 +132,7 @@ class DQNAgent(DNNAgent):
             X.append(s)
             Y.append(y)
         X, Y = map(np.array, [X, Y])
-        self.model.fit(X, Y, verbose=1, epochs=20)
+        self.model.fit(X, Y, verbose=1, epochs=5)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
@@ -149,9 +149,8 @@ class PGAgent(DNNAgent):
 
         def loss(y_true, y_pred):
             # y_true, the action
-            # y_pred, the prob
-            neg_log_prob = K.sparse_categorical_crossentropy(y_true, y_pred)
-            # neg_log_prob = -K.sum(K.log(y_pred) * y_true, axis=1)
+            # y_pred, the probability
+            neg_log_prob = -K.sum(K.log(y_pred) * y_true, axis=1)
             return K.mean(advantage * neg_log_prob)
 
         model = Model(inputs=[policy_net.input,
@@ -185,8 +184,9 @@ class PGAgent(DNNAgent):
 
     def replay(self):
         state, action, reward, _ = map(np.array, zip(*self.memory))
+        action = np.eye(self.action_size)[action]
         reward = self.discount_rewards(reward)
         reward -= reward.mean()
         reward /= (reward.std() + 1e-10)
-        self.model.fit([state, reward], action, verbose=1, epochs=20)
+        self.model.fit([state, reward], action, verbose=1, epochs=5)
         self.memory = []
