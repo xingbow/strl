@@ -5,6 +5,7 @@ import random
 from tensorflow.keras import Sequential, Input, Model
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import RMSprop, Adam
+from tensorflow.keras import regularizers
 import tensorflow.keras.backend as K
 
 
@@ -16,9 +17,6 @@ class Agent(object):
 
     def remember(self, state, action, reward, next_state):
         self.memory.append([state, action, reward, next_state])
-
-    def _sample_minibatch(self):
-        return random.sample(self.memory, min(len(self.memory), self.batch_size))
 
     def replay(self):
         raise NotImplementedError()
@@ -66,6 +64,9 @@ class DNNAgent(Agent):
 
         self.model = self._build_model()
 
+    def _sample_minibatch(self):
+        return random.sample(self.memory, min(len(self.memory), self.batch_size))
+
     def _build_model(self):
         raise NotImplementedError()
 
@@ -76,10 +77,16 @@ class DNNAgent(Agent):
             if i == 0:
                 dense = Dense(hidden_dim,
                               input_dim=self.state_size,
-                              activation='relu')
+                              activation='relu',
+                              kernel_regularizer=regularizers.l2(0.01),
+                              activity_regularizer=regularizers.l1(0.01)
+                              )
             else:
                 dense = Dense(hidden_dim,
-                              activation='relu')
+                              activation='relu',
+                              kernel_regularizer=regularizers.l2(0.01),
+                              activity_regularizer=regularizers.l1(0.01)
+                              )
             model.add(dense)
         return model
 
@@ -117,7 +124,7 @@ class DQNAgent(DNNAgent):
         state = np.array([state])
         return np.argmax(self.model.predict(state))
 
-    def replay(self):
+    def _replay_once(self):
         X = []
         Y = []
         minibatch = self._sample_minibatch()
@@ -132,9 +139,13 @@ class DQNAgent(DNNAgent):
             X.append(s)
             Y.append(y)
         X, Y = map(np.array, [X, Y])
-        self.model.fit(X, Y, verbose=1, epochs=5)
+        self.model.fit(X, Y, verbose=0, epochs=1)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
+
+    def replay(self, epochs=1):
+        for _ in range(epochs):
+            self._replay_once()
 
 
 class PGAgent(DNNAgent):
@@ -164,9 +175,6 @@ class PGAgent(DNNAgent):
 
         return model
 
-    def remember(self, state, action, reward, next_state):
-        self.memory.append([state, action, reward, next_state])
-
     def act(self, state):
         state = np.array([state])
         prob = self.model.predict([state, np.zeros(1)])[0]
@@ -182,11 +190,13 @@ class PGAgent(DNNAgent):
             discounted_reward[t] = running_add
         return discounted_reward
 
-    def replay(self):
+    def replay(self, epochs=1):
         state, action, reward, _ = map(np.array, zip(*self.memory))
         action = np.eye(self.action_size)[action]
+        print(action.shape)
+        print(np.argmax(action, axis=1))
         reward = self.discount_rewards(reward)
         reward -= reward.mean()
         reward /= (reward.std() + 1e-10)
-        self.model.fit([state, reward], action, verbose=1, epochs=5)
-        self.memory = []
+        self.model.fit([state, reward], action, verbose=1, epochs=epochs)
+        self.memory.clear()
