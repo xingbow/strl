@@ -78,14 +78,10 @@ class DNNAgent(Agent):
                 dense = Dense(hidden_dim,
                               input_dim=self.state_size,
                               activation='relu',
-                              kernel_regularizer=regularizers.l2(0.01),
-                              activity_regularizer=regularizers.l1(0.01)
                               )
             else:
                 dense = Dense(hidden_dim,
                               activation='relu',
-                              kernel_regularizer=regularizers.l2(0.01),
-                              activity_regularizer=regularizers.l1(0.01)
                               )
             model.add(dense)
         return model
@@ -139,7 +135,7 @@ class DQNAgent(DNNAgent):
             X.append(s)
             Y.append(y)
         X, Y = map(np.array, [X, Y])
-        self.model.fit(X, Y, verbose=0, epochs=1)
+        self.model.fit(X, Y, verbose=1, epochs=1)
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
@@ -151,6 +147,7 @@ class DQNAgent(DNNAgent):
 class PGAgent(DNNAgent):
     def __init__(self, state_size, action_size, hidden_dims, batch_size, eta, gamma):
         super().__init__(state_size, action_size, hidden_dims, batch_size, eta, gamma)
+        self.memory = []
 
     def _build_model(self):
         advantage = Input([1])
@@ -161,7 +158,8 @@ class PGAgent(DNNAgent):
         def loss(y_true, y_pred):
             # y_true, the action
             # y_pred, the probability
-            neg_log_prob = -K.sum(K.log(y_pred) * y_true, axis=1)
+            neg_log_prob = - \
+                K.sum(K.log(K.clip(y_pred, 0.01, 0.99)) * y_true, axis=1)
             return K.mean(advantage * neg_log_prob)
 
         model = Model(inputs=[policy_net.input,
@@ -193,7 +191,6 @@ class PGAgent(DNNAgent):
     def replay(self, epochs=1):
         state, action, reward, _ = map(np.array, zip(*self.memory))
         action = np.eye(self.action_size)[action]
-        print(action.shape)
         print(np.argmax(action, axis=1))
         reward = self.discount_rewards(reward)
         reward -= reward.mean()
