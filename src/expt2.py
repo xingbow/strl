@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import time
 
 from agent import DQNAgent, PGAgent, RandomAgent, DumbAgent
 from env import Env
@@ -17,10 +18,10 @@ ex.observers.append(MongoObserver.create())
 @ex.config
 def configuration():
     # experiment
-    num_rounds = 200
+    num_rounds = 500
 
     # real data
-    date = '2013/9/27'
+    date = '2013/9/20'
     scale = 1
     episode = 0
     community = 0
@@ -42,9 +43,11 @@ def configuration():
     batch_size = 128
     epochs = 5
 
+    snapshots_path = '../snapshots/{}/'.format(int(time.time()))
+
 
 @ex.capture
-def train(env, agent, round_, snapshot):
+def train(env, agent, round_, snapshot, snapshots_path):
     # switch to test mode, use real data
     name = agent.__class__.__name__
 
@@ -52,7 +55,7 @@ def train(env, agent, round_, snapshot):
     state = env.reset()
 
     if snapshot:
-        snapshots_path = '../snapshots/real/train/{}/{}.json'.format(
+        snapshots_path += 'train/{}-{}.json'.format(
             name, round_)
         # reset() will clear all snapshot events, so please register after reset()
         env.register_snapshots(snapshots_path, 200)
@@ -74,7 +77,7 @@ def train(env, agent, round_, snapshot):
 
 
 @ex.capture
-def test(env, agent, round_, snapshot):
+def test(env, agent, round_, snapshot, snapshots_path):
     # switch to test mode, use real data
     name = agent.__class__.__name__
 
@@ -82,7 +85,7 @@ def test(env, agent, round_, snapshot):
     state = env.reset()
 
     if snapshot:
-        snapshots_path = '../snapshots/real/test/{}/{}.json'.format(
+        snapshots_path += 'test/{}-{}.json'.format(
             name, round_)
         env.register_snapshots(snapshots_path, 200)
 
