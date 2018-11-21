@@ -17,13 +17,13 @@ ex.observers.append(MongoObserver.create())
 @ex.config
 def configuration():
     # experiment
-    num_round_s = 200
+    num_rounds = 200
 
     # real data
     date = '2013/9/26'
     scale = 1
     episode = 0
-    community = 0
+    community = 1
 
     # real world parameters
     num_trikes = 3
@@ -118,25 +118,24 @@ def run_on_agents(env, _config):
                        eta=_config['eta'],
                        epochs=_config['epochs'])
 
-    num_round_s = _config['num_round_s']
+    num_rounds = _config['num_rounds']
     num_snapshots = 10
-    snapshot_round_s = [0, num_round_s-1] + \
-        np.linspace(1, num_round_s-1, num_snapshots-2, dtype=int).tolist()
+    snapshot_rounds = [0, num_rounds-1] + \
+        np.linspace(1, num_rounds-1, num_snapshots-2, dtype=int).tolist()
 
-    for round_ in range(num_round_s):
+    for round_ in range(num_rounds):
         env.simulator.resample()  # train on resampled environment
-        train(env, pg_agent, round_=round_,
-              snapshot=round_ in snapshot_round_s)
-        train(env, dqn_agent, round_=round_,
-              snapshot=round_ in snapshot_round_s)
+        snapshot = round_ in snapshot_rounds
+        train(env, pg_agent, round_=round_, snapshot=snapshot)
+        train(env, dqn_agent, round_=round_, snapshot=snapshot)
 
         if round_ % 2 == 0:
             # test
             env.simulator.switch_mode(train=False)
-            test(env, dumb_agent, round_, snapshot=round_ in snapshot_round_s)
-            test(env, random_agent, round_, snapshot=round_ in snapshot_round_s)
-            test(env, pg_agent, round_, snapshot=round_ in snapshot_round_s)
-            test(env, dqn_agent, round_, snapshot=round_ in snapshot_round_s)
+            test(env, dumb_agent, round_, snapshot=snapshot)
+            test(env, random_agent, round_, snapshot=snapshot)
+            test(env, pg_agent, round_, snapshot=snapshot)
+            test(env, dqn_agent, round_, snapshot=snapshot)
             env.simulator.switch_mode(train=True)
 
 
