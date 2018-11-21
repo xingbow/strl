@@ -20,13 +20,13 @@ def configuration():
     num_rounds = 200
 
     # real data
-    date = '2013/9/26'
+    date = '2013/9/27'
     scale = 1
     episode = 0
-    community = 1
+    community = 0
 
     # real world parameters
-    num_trikes = 3
+    num_trikes = 4
     capacity = 10
     rho = -1
     mu = 200 / 60
@@ -120,8 +120,8 @@ def run_on_agents(env, _config):
 
     num_rounds = _config['num_rounds']
     num_snapshots = 10
-    snapshot_rounds = [0, num_rounds-1] + \
-        np.linspace(1, num_rounds-1, num_snapshots-2, dtype=int).tolist()
+    snapshot_rounds = [num_rounds-1] + \
+        np.linspace(0, num_rounds-1, num_snapshots-1, dtype=int).tolist()
 
     for round_ in range(num_rounds):
         env.simulator.resample()  # train on resampled environment
