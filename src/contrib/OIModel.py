@@ -332,9 +332,17 @@ def OModel(timeStamp,stationID,hisInputData,weatherMatrix,overAllTest,pred_y,day
     '''
     strTime = []
     expectedDepartureNumber = get_topKSimilarity(timeStamp,stationID,hisInputData,weatherMatrix,overAllTest,pred_y,dayNumBound) # 0:sunny,1:rain,2:snow,3:fog
-    for i in range(expectedDepartureNumber):
-        predictedTime = (timeStamp - timeStamp % 3600 + random.randint(0, 59) * 60)
+    # for i in range(expectedDepartureNumber):
+    #     predictedTime = (timeStamp - timeStamp % 3600 + random.randint(0, 59) * 60)
+    #     strTime.append(predictedTime)
+
+    predictedTime = timeStamp - timeStamp % 3600
+    while predictedTime < (timeStamp - timeStamp % 3600 + 60 * 60):
         strTime.append(predictedTime)
+        if expectedDepartureNumber <= 0:
+            break
+        predictedTime += np.random.exponential(1 / expectedDepartureNumber) * 3600
+
     return strTime
 
 def get_expectDepartureNumber(timeStamp,stationID,hisInputDataGlobal, weatherMatrixGlobal,overAllTest,pret_y,timeBound):
