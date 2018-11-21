@@ -1,18 +1,20 @@
 from contrib.core import combine_interfaces, get_periods
 import numpy as np
+import pickle
 
 
 class Simulator(object):
-    def __init__(self, date, scale, episode, community, mu, tr, er, real):
+    def __init__(self, date, episode, community, mu, tr, er, scale):
         self.I = combine_interfaces(date, episode, community)
+
         self.scale = scale
         self.mu = mu
         self.tr = tr
         self.er = er
         self.periods = get_periods(date, episode)
-        self.real = real
+
         self.limits = (self.I['limits'] * self.scale).astype(int)
-        self.loads = np.round(0.5 * self.limits).astype(int)
+        self.loads = np.round(0.75 * self.limits).astype(int)
 
         self.num_regions = len(self.limits)
 
@@ -22,20 +24,23 @@ class Simulator(object):
 
         self.locations = self.I['locations']
         self.distance = self.I['distance']
-        self.real_rents = self.I['real_rents']
-        self.real_returns = self.I['real_returns']
-        self.real_return_map = self.I['real_return_map']
+
+        self.test_rents = self.I['real_rents'].tolist()
+        self.test_returns = self.I['real_returns']
+        self.test_trips = self.I['real_trips']
 
         self.resample()
+        self.switch_mode(True)
 
-    def _sample_rent_return(self):
+    def _sample_trips(self):
         # sample rents
         rents = []
-        # for _ in range(self.scale):
-        for period in self.periods:
-            for r in range(self.num_regions):
-                ts = self._demands(period[0], r)
-                rents += [(t, r) for t in ts]
+
+        for _ in range(2):
+            for period in self.periods:
+                for r in range(self.num_regions):
+                    ts = self._demands(period[0], r)
+                    rents += [(t, r) for t in ts]
 
         # estimate returns for each rent
         returns = []
@@ -45,19 +50,26 @@ class Simulator(object):
             returns += [(t1, r1)]
 
         # map rent to return
-        return_map = {tuple(k): tuple(v)
-                      for k, v in zip(rents,
-                                      returns)}
+        trips = {tuple(k): tuple(v)
+                 for k, v in zip(rents,
+                                 returns)}
 
-        return rents, returns, return_map
+        return rents, returns, trips
+
+    def switch_mode(self, train):
+        if train:
+            self.env_rents = self.train_rents
+            self.env_trips = self.train_trips
+        else:
+            self.env_rents = self.test_rents
+            self.env_trips = self.test_trips
+
+        print(len(self.env_rents))
+        print(len(self.estimated_rents))
 
     def resample(self):
-        if not self.real:  # the real data is sampled
-            self.real_rents, self.real_returns, self.real_return_map\
-                = self._sample_rent_return()
-
-        self.estimated_rents, self.estimated_returns, self.estimated_return_map\
-            = self._sample_rent_return()
+        self.train_rents, self.train_returns, self.train_trips = self._sample_trips()
+        self.estimated_rents, self.estimated_returns, self.estimated_trips = self._sample_trips()
 
     def estimate_bike_arrival_time(self, t, r0, r1):
         return t + self._duration(t, r0, r1)
@@ -75,10 +87,10 @@ class Simulator(object):
         return o
 
     def query_rents(self):
-        return self.real_rents
+        return self.env_rents
 
     def query_return(self, t, r):
-        return self.real_return_map[(t, r)]
+        return self.env_trips[(t, r)]
 
     def query_nearest_region(self, r):
         """
