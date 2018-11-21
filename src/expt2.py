@@ -17,114 +17,127 @@ ex.observers.append(MongoObserver.create())
 @ex.config
 def configuration():
     # experiment
-    num_train_epochs = 200
-    num_test_epochs = 10
+    num_round_s = 200
 
-    # agent
+    # real data
+    date = '2013/9/26'
+    scale = 1
+    episode = 0
+    community = 0
+
+    # real world parameters
     num_trikes = 3
     capacity = 10
     rho = -1
-    mu = 30 / 3.6  # 30km/h
+    mu = 200 / 60
     tr = 60 * 3
-    er = 3 * 60
+    er = 60 * 3
 
-    # reinforcement learning
+    # agents
     gamma = 0.95        # discount rate
 
     # neural net
-    hidden_dims = [64, 64]
+    hidden_dims = [128, 128]
     eta = 1e-3          # learning rate
     batch_size = 128
+    epochs = 5
 
 
 @ex.capture
-def train(env, agent, _config):
-    num_epochs = _config['num_train_epochs']
+def train(env, agent, round_, snapshot):
+    # switch to test mode, use real data
     name = agent.__class__.__name__
-    snapshot_epochs = [0, num_epochs // 2]
 
-    for epoch in range(num_epochs):
-        done = False
-        state = env.reset()
+    done = False
+    state = env.reset()
 
-        if epoch in snapshot_epochs:
-            snapshots_path = '../fig/{}-{}/'.format(name, epoch)
-            # env.book_snapshots(snapshots_path, 200)
+    if snapshot:
+        snapshots_path = '../snapshots/real/train/{}/{}.json'.format(
+            name, round_)
+        # reset() will clear all snapshot events, so please register after reset()
+        env.register_snapshots(snapshots_path, 200)
 
-        while not done:
-            action = agent.act(state)
-            next_state, reward, done, _ = env.step(action)
-            agent.remember(state, action, reward, next_state)
-            state = next_state
+    while not done:
+        action = agent.act(state)
+        # action = env.pruning(prob=0.1) or action
+        next_state, reward, done, _ = env.step(action)
+        agent.remember(state, action, reward, next_state)
+        state = next_state
 
-        # train
-        agent.replay()
+    # train
+    agent.replay()
 
-        loss = env.loss
-        print('train epoch {}, loss {}'.format(epoch, loss))
-        ex.log_scalar('{}.train.loss'.format(name), loss)
+    # print training info
+    loss = env.loss
+    print('train round {}, loss {}'.format(round_, loss))
+    ex.log_scalar('{}.train.loss'.format(name), loss, round_)
 
 
 @ex.capture
-def test(env, agent, _config):
-    num_epochs = _config['num_test_epochs']
+def test(env, agent, round_, snapshot):
+    # switch to test mode, use real data
     name = agent.__class__.__name__
-    snapshot_epochs = [0, num_epochs - 1]
 
-    for epoch in range(num_epochs):
-        done = False
-        state = env.reset()
+    done = False
+    state = env.reset()
 
-        if epoch in snapshot_epochs:
-            snapshots_path = '../fig/{}-{}/'.format(name, epoch)
-            # env.book_snapshots(snapshots_path, 200)
+    if snapshot:
+        snapshots_path = '../snapshots/real/test/{}/{}.json'.format(
+            name, round_)
+        env.register_snapshots(snapshots_path, 200)
 
-        while not done:
-            action = agent.act(state)
-            next_state, _, done, _ = env.step(action)
-            state = next_state
+    while not done:
+        action = agent.act(state)
+        next_state, _, done, _ = env.step(action)
+        state = next_state
 
-        loss = env.loss
-        print('test epoch {}, loss {}'.format(epoch, loss))
-        ex.log_scalar('{}.test.loss'.format(name), loss)
-
-
-@ex.capture
-def run_dumb_agent(env, _config):
-    agent = DumbAgent()
-    test(env, agent)
+    loss = env.loss
+    print('test round {}, loss {}'.format(round_, loss))
+    ex.log_scalar('{}.test.loss'.format(name), loss, round_)
 
 
 @ex.capture
-def run_random_agent(env, _config):
-    agent = RandomAgent(env.action_size)
-    test(env, agent)
+def run_on_agents(env, _config):
+    dumb_agent = DumbAgent()
 
+    random_agent = RandomAgent(env.action_size)
 
-@ex.capture
-def run_dqn_agent(env, _config):
-    agent = DQNAgent(env.state_size,
-                     env.action_size,
-                     batch_size=_config['batch_size'],
-                     hidden_dims=_config['hidden_dims'],
-                     gamma=_config['gamma'],
-                     eta=_config['eta'])
+    dqn_agent = DQNAgent(env.state_size,
+                         env.action_size,
+                         batch_size=_config['batch_size'],
+                         hidden_dims=_config['hidden_dims'],
+                         gamma=_config['gamma'],
+                         eta=_config['eta'],
+                         epochs=_config['epochs'])
 
-    train(env, agent)
-    test(env, agent)
+    pg_agent = PGAgent(env.state_size,
+                       env.action_size,
+                       batch_size=_config['batch_size'],
+                       hidden_dims=_config['hidden_dims'],
+                       gamma=_config['gamma'],
+                       eta=_config['eta'],
+                       epochs=_config['epochs'])
 
+    num_round_s = _config['num_round_s']
+    num_snapshots = 10
+    snapshot_round_s = [0, num_round_s-1] + \
+        np.linspace(1, num_round_s-1, num_snapshots-2, dtype=int).tolist()
 
-@ex.capture
-def run_pg_agent(env, _config):
-    agent = PGAgent(env.state_size,
-                    env.action_size,
-                    batch_size=_config['batch_size'],
-                    hidden_dims=_config['hidden_dims'],
-                    gamma=_config['gamma'],
-                    eta=_config['eta'])
+    for round_ in range(num_round_s):
+        env.simulator.resample()  # train on resampled environment
+        train(env, pg_agent, round_=round_,
+              snapshot=round_ in snapshot_round_s)
+        train(env, dqn_agent, round_=round_,
+              snapshot=round_ in snapshot_round_s)
 
-    train(env, agent)
-    test(env, agent)
+        if round_ % 2 == 0:
+            # test
+            env.simulator.switch_mode(train=False)
+            test(env, dumb_agent, round_, snapshot=round_ in snapshot_round_s)
+            test(env, random_agent, round_, snapshot=round_ in snapshot_round_s)
+            test(env, pg_agent, round_, snapshot=round_ in snapshot_round_s)
+            test(env, dqn_agent, round_, snapshot=round_ in snapshot_round_s)
+            env.simulator.switch_mode(train=True)
 
 
 @ex.automain
@@ -135,15 +148,11 @@ def main(_config):
                           community=_config['community'],
                           mu=_config['mu'],
                           tr=_config['tr'],
-                          er=_config['er'],
-                          real=_config['real'])
+                          er=_config['er'])
 
     env = Env(simulator=simulator,
               num_trikes=_config['num_trikes'],
               capacity=_config['capacity'],
               rho=_config['rho'])
 
-    # run_dumb_agent(env)
-    run_random_agent(env)
-    run_pg_agent(env)
-    run_dqn_agent(env)
+    run_on_agents(env)

@@ -3,7 +3,7 @@ from collections import deque
 import random
 
 from tensorflow.keras import Sequential, Input, Model
-from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.layers import Dense
 from tensorflow.keras.optimizers import RMSprop, Adam
 from tensorflow.keras import regularizers
 import tensorflow.keras.backend as K
@@ -54,13 +54,14 @@ class RandomAgent(Agent):
 
 
 class DNNAgent(Agent):
-    def __init__(self, state_size, action_size, hidden_dims, batch_size, eta, gamma):
+    def __init__(self, state_size, action_size, hidden_dims, batch_size, eta, gamma, epochs):
         super().__init__(state_size, action_size)
 
         self.batch_size = batch_size
         self.hidden_dims = hidden_dims
         self.eta = eta
         self.gamma = gamma
+        self.epochs = epochs
 
         self.model = self._build_model()
 
@@ -78,10 +79,14 @@ class DNNAgent(Agent):
                 dense = Dense(hidden_dim,
                               input_dim=self.state_size,
                               activation='relu',
+                              kernel_regularizer=regularizers.l2(1e-3),
+                              activity_regularizer=regularizers.l1(1e-3),
                               )
             else:
                 dense = Dense(hidden_dim,
                               activation='relu',
+                              kernel_regularizer=regularizers.l2(1e-3),
+                              activity_regularizer=regularizers.l1(1e-3),
                               )
             model.add(dense)
         return model
@@ -94,8 +99,8 @@ class DNNAgent(Agent):
 
 
 class DQNAgent(DNNAgent):
-    def __init__(self, state_size, action_size, hidden_dims, batch_size, eta, gamma):
-        super().__init__(state_size, action_size, hidden_dims, batch_size, eta, gamma)
+    def __init__(self, state_size, action_size, hidden_dims, batch_size, eta, gamma, epochs):
+        super().__init__(state_size, action_size, hidden_dims, batch_size, eta, gamma, epochs)
 
         # exploration rate
         self.epsilon = 1.0
@@ -104,12 +109,9 @@ class DQNAgent(DNNAgent):
 
     def _build_model(self):
         model = self._get_sequential()
-
         model.add(Dense(self.action_size, activation='linear'))
-
         model.compile(loss='mse',
                       optimizer=Adam(self.eta))
-
         model.summary()
 
         return model
@@ -139,15 +141,15 @@ class DQNAgent(DNNAgent):
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-    def replay(self, epochs=1):
-        for _ in range(epochs):
+    def replay(self):
+        for _ in range(self.epochs):
             self._replay_once()
 
 
 class PGAgent(DNNAgent):
-    def __init__(self, state_size, action_size, hidden_dims, batch_size, eta, gamma):
-        super().__init__(state_size, action_size, hidden_dims, batch_size, eta, gamma)
-        self.memory = []
+    def __init__(self, state_size, action_size, hidden_dims, batch_size, eta, gamma, epochs):
+        super().__init__(state_size, action_size, hidden_dims, batch_size, eta, gamma, epochs)
+        self.estimator = self._build_estimator()
 
     def _build_model(self):
         advantage = Input([1])
@@ -159,7 +161,7 @@ class PGAgent(DNNAgent):
             # y_true, the action
             # y_pred, the probability
             neg_log_prob = - \
-                K.sum(K.log(K.clip(y_pred, 0.01, 0.99)) * y_true, axis=1)
+                K.sum(K.log(K.clip(y_pred, 0.001, 0.999)) * y_true, axis=1)
             return K.mean(advantage * neg_log_prob)
 
         model = Model(inputs=[policy_net.input,
@@ -172,6 +174,19 @@ class PGAgent(DNNAgent):
         model.summary()
 
         return model
+
+    def _build_estimator(self):
+        """Baseline estimator
+        """
+        estimator = self._get_sequential()
+        estimator.add(Dense(1, activation='linear'))
+
+        estimator.compile(loss='mse',
+                          optimizer=Adam(self.eta))
+
+        estimator.summary()
+
+        return estimator
 
     def act(self, state):
         state = np.array([state])
@@ -188,12 +203,13 @@ class PGAgent(DNNAgent):
             discounted_reward[t] = running_add
         return discounted_reward
 
-    def replay(self, epochs=1):
+    def replay(self):
         state, action, reward, _ = map(np.array, zip(*self.memory))
         action = np.eye(self.action_size)[action]
-        print(np.argmax(action, axis=1))
-        reward = self.discount_rewards(reward)
-        reward -= reward.mean()
-        reward /= (reward.std() + 1e-10)
-        self.model.fit([state, reward], action, verbose=1, epochs=epochs)
+        total_return = self.discount_rewards(reward)
+        baseline_value = self.estimator.predict(state)[:, 0]
+        advantage = total_return - baseline_value
+        self.estimator.fit(state, total_return, epochs=self.epochs)
+        self.model.fit([state, advantage], action,
+                       verbose=1, epochs=self.epochs)
         self.memory.clear()
