@@ -22,7 +22,6 @@ class Env(object):
         self.num_trikes = num_trikes
         self.rho = rho
         self.load(simulator)
-        self.reset()
 
 # ------------------------ initialization ------------------------------------
 
@@ -48,8 +47,6 @@ class Env(object):
         self.events = []    # ordered
         self.history = []   # unordered, to visualize
 
-        self.simulator.resample()  # resample every reset
-
         for t, r in self.simulator.query_rents():
             self._push_rent_event(t, r, 1)
 
@@ -59,7 +56,9 @@ class Env(object):
         self.le, _ = self._run_until_next_reposition()
         return self._get_obs()
 
+
 # ------------------------ event management  ------------------------------------
+
 
     def _push_event(self, event):
         i = len(self.history)
@@ -123,15 +122,18 @@ class Env(object):
 
 # ------------------------ state update ------------------------------------
 
-    def pruning(self):
+    def pruning(self, prob):
         action = None
 
-        if self.rho < 0:  # pruning off
+        if self.rho < 0 or np.random.random() < 1 - prob:  # pruning off
             return action
 
         expected = self.expected_bikes
 
-        if np.min(expected) <= self.rho:  # deficient
+        congested = np.min(self.capacity - expected) <= self.rho
+        deficient = np.min(expected) <= self.rho
+
+        if congested or deficient:
             if self.le['l'] / self.capacity > 0.5:
                 # find the region with minimal expected bikes
                 r = np.argmin(expected)
@@ -154,8 +156,11 @@ class Env(object):
         # run reposition action
         self.le, loss = self._run_until_next_reposition()
         self.losses.append(loss)
-
-        return self._get_obs(), -loss, self.done, None
+        if loss > 0:
+            reward = -loss
+        else:
+            reward = 1
+        return self._get_obs(), reward, self.done, self.le['i']
 
     def _register_action(self, action):
         r1, n = self.decode_action(action)
@@ -190,6 +195,7 @@ class Env(object):
                 reject = self._update_bikes(e['r'], e['n'])
                 if reject != 0:  # return failed, register nearest return
                     assert reject > 0
+                    loss += abs(reject)
                     self._push_nearest_return_event(e['t'], e['r'], reject)
 
             if e['tag'] == 'reposition':
@@ -210,10 +216,6 @@ class Env(object):
         return self.tau >= self.simulator.end_time
 
     @property
-    def observation_size(self):
-        return self._get_obs().shape
-
-    @property
     def action_size(self):
         return self.num_regions * (self.capacity * 2 + 1)
 
@@ -223,7 +225,7 @@ class Env(object):
 
     @property
     def state_size(self):
-        return np.prod(self._get_obs().shape)
+        return self.num_regions * 4
 
     @property
     def loss(self):
@@ -236,10 +238,10 @@ class Env(object):
         return np.concatenate([self.loads / max_limit,
                                self.future_demands / max_limit,
                                self.other_trikes_status / max_limit,
-                               self.current_trike_status / self.capacity])
+                               self.current_trike_status / max_limit])
 
         # return np.concatenate([self.expected_bikes / max_limit,
-        #                        self.current_trike_status])
+        #                        self.current_trike_status / max_limit])
 
     @property
     def future_demands(self):
@@ -276,12 +278,6 @@ class Env(object):
         action = r + (n + self.capacity) * self.num_regions
         return action
 
-    def featurize_action(self, action):
-        r, n = self.decode_action(action)
-        s = np.eye(self.num_regions)[r]
-        b = [n]
-        return np.concatenate([s, b])
-
 #  ------------------------ render ------------------------
 
     def render(self):
@@ -311,24 +307,25 @@ class Env(object):
             if e['tag'] == 'reposition':
                 p0, p1, p = self._trike_position(e, tau)
                 trike = {
-                    "p": p.tolist(),
-                    "p0": p0.tolist(),
-                    "p1": p1.tolist(),
-                    "to_load": e['n'],
-                    "loaded": e['l'],
-                    "t0": e['t0'],
-                    "t1": e['t'],
-                    "id": e['i'],
+                    "p": p.tolist(),         # current position
+                    "p0": p0.tolist(),       # start position
+                    "p1": p1.tolist(),       # end position
+                    "to_load": e['n'],       # number to load  at end position,
+                    "loaded": e['l'],        # current bikes on this trike
+                    "t0": e['t0'],           # start time
+                    "t1": e['t'],            # end time
+                    "id": e['i'],            # trike id
                 }
                 frame["trikes"].append(trike)
 
         # add regions
         for i in range(self.num_regions):
             region = {
-                "p": self.locations[i].tolist(),
+                "p": self.locations[i].tolist(),  # position
+                # region id (reindexed, from 0)
                 "id": i,
-                "loaded": self.loads[i],
-                "capacity": self.limits[i],
+                "loaded": self.loads[i],          # current bikes
+                "capacity": self.limits[i],       # capacity
             }
             frame["regions"].append(region)
 
