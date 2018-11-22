@@ -56,3 +56,9 @@ python snapshots/visualize.py snapshots/json/file-to-visualize.json
     ├── expt.py                       # main experiment
     └── simulator.py                  # simulator
 ```
+
+## Experiment Environment
+
+- **Operating System**: Darwin-18.2.0-x86_64-i386-64bit
+- **Python Version**: 3.6.5
+- **CPU**: Intel(R) Core(TM) i5-7267U CPU @ 3.10GHz
