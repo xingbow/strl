@@ -15,6 +15,12 @@ ex = Experiment("bike-reposition-real")
 ex.observers.append(MongoObserver.create())
 
 
+import os
+
+FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+ROOT_DIR = os.path.dirname(FILE_DIR)
+
+
 @ex.config
 def configuration():
     # experiment
@@ -43,7 +49,8 @@ def configuration():
     batch_size = 128
     epochs = 5
 
-    snapshots_path = '../snapshots/json/{}/'.format(int(time.time()))
+    snapshots_path = os.path.join(
+        ROOT_DIR, 'snapshots', 'json', str(int(time.time())))
 
 
 @ex.capture

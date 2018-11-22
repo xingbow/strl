@@ -10,6 +10,9 @@ from collections import defaultdict
 import pickle
 import os
 
+FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+ROOT_DIR = os.path.dirname(os.path.dirname(FILE_DIR))
+
 DURATIONS = [
     [[7, 11]],
     [[11, 12], [16, 17]],
@@ -46,15 +49,15 @@ def get_periods(date, ep_i):
 
 def zh_interfaces(date):
     # type in file loc
-    transitionDataLoc = '../data/test.csv'  # transition file
-    weatherDataLoc = '../data/weather.csv'  # weather info file
+    transitionDataLoc = ROOT_DIR + '/data/test.csv'  # transition file
+    weatherDataLoc = ROOT_DIR + '/data/weather.csv'  # weather info file
 
     # zhenhua magic number (timestamp base), 2013/8/1 GMT+0
     startTime = 1375315200
     timeStampBound = date_to_timestamp(date)
 
     dayNumBound = (timeStampBound - startTime) // (24 * 3600)
-    path = '../data/zh-{}.pkl'.format(date.replace('/', '-'))
+    path = ROOT_DIR + '/data/zh-{}.pkl'.format(date.replace('/', '-'))
     try:
         with open(path, 'rb') as f:
             hisInputData, transitionMatrixDuration,\
@@ -106,7 +109,7 @@ def extract_region(df):
 
     station_df.columns = ['sid', 'rid', 'x', 'y']
 
-    limit_df = pd.read_csv('../data/stationStatus.csv')
+    limit_df = pd.read_csv(ROOT_DIR + '/data/stationStatus.csv')
     limit_df.columns = ['sid', 'name', 'limit']
     del limit_df['name']
     limit_df['limit'] = limit_df['limit'].fillna(0)
@@ -128,7 +131,7 @@ def extract_region(df):
 
 
 def xb_interfaces(date, episode, community):
-    transitionDataLoc = '../data/test.csv'  # transition file
+    transitionDataLoc = ROOT_DIR + '/data/test.csv'  # transition file
     # xingbo magic number (timestamp base), 2013/7/1 GMT+0
     startTime = 1372636800
 
