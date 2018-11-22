@@ -7,12 +7,16 @@ from agent import DQNAgent, PGAgent, RandomAgent, DumbAgent
 from env import Env
 from artificial_simulator import ArtificialSimulator
 
+FILE_DIR = os.path.dirname(os.path.realpath(__file__))
+ROOT_DIR = os.path.dirname(FILE_DIR)
+
 
 from sacred import Experiment
-from sacred.observers import MongoObserver
+from sacred.observers import MongoObserver, FileStorageObserver
 
 ex = Experiment("bike-reposition-real")
-ex.observers.append(MongoObserver.create())
+# ex.observers.append(MongoObserver.create())
+ex.observers.append(FileStorageObserver.create(ROOT_DIR + 'results'))
 
 
 @ex.config
@@ -49,7 +53,7 @@ def train(env, agent, round_, snapshot, snapshots_path):
     state = env.reset()
 
     if snapshot:
-        snapshots_path += 'train/{}-{}.json'.format(
+        snapshots_path += '/train/{}-{}.json'.format(
             name, round_)
         # reset() will clear all snapshot events, so please register after reset()
         env.register_snapshots(snapshots_path, 200)
@@ -79,7 +83,7 @@ def test(env, agent, round_, snapshot, snapshots_path):
     state = env.reset()
 
     if snapshot:
-        snapshots_path += 'test/{}-{}.json'.format(
+        snapshots_path += '/test/{}-{}.json'.format(
             name, round_)
         env.register_snapshots(snapshots_path, 200)
 

@@ -15,7 +15,7 @@ episode3 = [17,18]
 episode1 = [[11,12],[16,17]]
 episode4 = [18,23]'''
 
-NON_EMPTY_PROPORTION = 1
+NON_EMPTY_PROPORTION = 0.8
 
 startTime = 1375315200
 matrixSize = 33

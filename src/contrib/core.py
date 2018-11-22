@@ -49,7 +49,7 @@ def get_periods(date, ep_i):
 
 def zh_interfaces(date):
     # type in file loc
-    transitionDataLoc = ROOT_DIR + '/data/test.csv'  # transition file
+    transitionDataLoc = ROOT_DIR + '/data/transition.csv'  # transition file
     weatherDataLoc = ROOT_DIR + '/data/weather.csv'  # weather info file
 
     # zhenhua magic number (timestamp base), 2013/8/1 GMT+0
@@ -131,7 +131,7 @@ def extract_region(df):
 
 
 def xb_interfaces(date, episode, community):
-    transitionDataLoc = ROOT_DIR + '/data/test.csv'  # transition file
+    transitionDataLoc = ROOT_DIR + '/data/transition.csv'  # transition file
     # xingbo magic number (timestamp base), 2013/7/1 GMT+0
     startTime = 1372636800
 

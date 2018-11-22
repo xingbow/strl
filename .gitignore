@@ -5,3 +5,4 @@ data
 fig
 snapshots/**/*.json
 snapshots/**/*.gif
+results/*
