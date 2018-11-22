@@ -30,9 +30,7 @@ python3 src/expt.py
 
 ## Run Artificial Experiment
 
-Artificial experiment is designed for debug our agent, it is more fun and intuitive.
-
-In the root directory, run:
+The artificial experiment is designed for debugging our agent before the real data is ready (we want to develop the project in parallel), it is more fun and intuitive. In the root directory, run:
 
 ```bash
 python3 src/artificial_expt.py
