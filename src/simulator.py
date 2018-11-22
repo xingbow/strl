@@ -1,6 +1,8 @@
 from contrib.core import combine_interfaces, get_periods
+from contrib.OIModel import NON_EMPTY_PROPORTION
 import numpy as np
 import pickle
+import random
 
 
 class Simulator(object):
@@ -25,8 +27,16 @@ class Simulator(object):
         self.locations = self.I['locations']
         self.distance = self.I['distance']
 
-        self.test_rents = self.I['real_rents'].tolist()
-        self.test_returns = self.I['real_returns']
+        self.test_rents = self.I['real_rents']
+        # since there are no customer loss
+        # we resample it by assuming there are some
+        # time the station is empty
+        # whose propotion is (1 - NON_EMPTY_PROPOTION)
+        num_rents = int(len(self.test_rents) / (NON_EMPTY_PROPORTION))
+        ix = np.random.randint(0, len(self.test_rents), num_rents)
+        print(len(ix), num_rents)
+        self.test_rents = self.test_rents[ix]
+        # resample finished
         self.test_trips = self.I['real_trips']
 
         self.resample()
@@ -56,6 +66,11 @@ class Simulator(object):
 
         return rents, returns, trips
 
+    def _print_rent_demands(self, rents, info):
+        ts, rs = zip(*rents)
+        u, c = np.unique(rs, return_counts=True)
+        print(info, len(rents), dict(zip(u, c)))
+
     def switch_mode(self, train):
         if train:
             self.env_rents = self.train_rents
@@ -64,8 +79,8 @@ class Simulator(object):
             self.env_rents = self.test_rents
             self.env_trips = self.test_trips
 
-        print(len(self.env_rents))
-        print(len(self.estimated_rents))
+        self._print_rent_demands(self.env_rents, "running rents")
+        self._print_rent_demands(self.estimated_rents, "estimate rents")
 
     def resample(self):
         self.train_rents, self.train_returns, self.train_trips = self._sample_trips()

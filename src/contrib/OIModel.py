@@ -15,6 +15,7 @@ episode3 = [17,18]
 episode1 = [[11,12],[16,17]]
 episode4 = [18,23]'''
 
+NON_EMPTY_PROPORTION = 1
 
 startTime = 1375315200
 matrixSize = 33
@@ -336,6 +337,7 @@ def OModel(timeStamp,stationID,hisInputData,weatherMatrix,overAllTest,pred_y,day
     #     predictedTime = (timeStamp - timeStamp % 3600 + random.randint(0, 59) * 60)
     #     strTime.append(predictedTime)
 
+    expectedDepartureNumber /= NON_EMPTY_PROPORTION
     predictedTime = timeStamp - timeStamp % 3600
     while predictedTime < (timeStamp - timeStamp % 3600 + 60 * 60):
         strTime.append(predictedTime)

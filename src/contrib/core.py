@@ -20,7 +20,7 @@ DURATIONS = [
 
 
 def date_to_timestamp(date):
-    return int(datetime.strptime(date, '%Y/%m/%d').timestamp())
+    return int((datetime.strptime(date, '%Y/%m/%d') - datetime(1970, 1, 1)).total_seconds())
 
 
 def get_episode(date, ep_i):
@@ -49,18 +49,19 @@ def zh_interfaces(date):
     transitionDataLoc = '../data/test.csv'  # transition file
     weatherDataLoc = '../data/weather.csv'  # weather info file
 
-    startTime = 1375286400  # xingbo magic number (timestamp base)
+    # zhenhua magic number (timestamp base), 2013/8/1 GMT+0
+    startTime = 1375315200
     timeStampBound = date_to_timestamp(date)
 
     dayNumBound = (timeStampBound - startTime) // (24 * 3600)
-
+    path = '../data/zh-{}.pkl'.format(date.replace('/', '-'))
     try:
-        with open('../data/zh_tmp.pkl', 'rb') as f:
+        with open(path, 'rb') as f:
             hisInputData, transitionMatrixDuration,\
                 transitionMatrixDestination, weatherMatrix, \
                 overAllTest, pred_y, dayNumBound = pickle.load(f)
     except:
-        with open('../data/zh_tmp.pkl', 'wb') as f:
+        with open(path, 'wb') as f:
             hisInputData, transitionMatrixDuration, transitionMatrixDestination,\
                 weatherMatrix, entireSituation, weatherMatrixAll\
                 = om.read_inData(transitionDataLoc, weatherDataLoc)
@@ -128,7 +129,8 @@ def extract_region(df):
 
 def xb_interfaces(date, episode, community):
     transitionDataLoc = '../data/test.csv'  # transition file
-    startTime = 1375286400  # xingbo magic number (timestamp base)
+    # xingbo magic number (timestamp base), 2013/7/1 GMT+0
+    startTime = 1372636800
 
     # get all of the trip data on specific episode & community
     # after this, relation ship between region and station should be fixed
@@ -146,7 +148,6 @@ def xb_interfaces(date, episode, community):
     ep = get_episode(date, episode)
     tdf = tdf[(tdf['start timestamp'] >= ep[0])
               & (tdf['start timestamp'] < ep[1])]
-
     tdf = tdf[(tdf['end timestamp'] >= ep[0])
               & (tdf['end timestamp'] < ep[1])]
 
@@ -174,9 +175,9 @@ def combine_interfaces(date, episode, community):
     real_returns = tdf[['end timestamp',
                         'end id']].values.astype(int)
 
-    real_return_map = {tuple(k): tuple(v)
-                       for k, v in zip(real_rents,
-                                       real_returns)}
+    real_trips = {tuple(k): tuple(v)
+                  for k, v in zip(real_rents,
+                                  real_returns)}
 
     limits = np.round(rdf['limit'].values).astype(int)
 
@@ -212,6 +213,6 @@ def combine_interfaces(date, episode, community):
         "rids": rids,
         "real_rents": real_rents,
         "real_returns": real_returns,
-        "real_return_map": real_return_map,
+        "real_trips": real_trips,
         "locations": locations,
     }
