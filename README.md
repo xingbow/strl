@@ -18,14 +18,24 @@ Three data file is used to train the model:
 
 `./data/stationStatus.csv`, station information.
 
-If there are no data found in this folder, please download the data.zip file in [this github repository]( https://github.com/enhuiz/Bike-Reposition-Data).
+If there are no data found in this folder, please download the data.zip file in [this github repository](https://github.com/enhuiz/Bike-Reposition-Data).
 
 ## Run Experiment
 
 In the root directory, run:
 
 ```bash
-python3 src/expt.py -F results
+python3 src/expt.py
+```
+
+## Run Artificial Experiment
+
+Artificial experiment is designed for debug our agent, it is more fun and intuitive.
+
+In the root directory, run:
+
+```bash
+python3 src/artificial_expt.py
 ```
 
 ## Visualization

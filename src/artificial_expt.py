@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import time
+import os
 
 from agent import DQNAgent, PGAgent, RandomAgent, DumbAgent
 from env import Env
@@ -16,7 +17,8 @@ from sacred.observers import MongoObserver, FileStorageObserver
 
 ex = Experiment("bike-reposition-real")
 # ex.observers.append(MongoObserver.create())
-ex.observers.append(FileStorageObserver.create(ROOT_DIR + 'results'))
+ex.observers.append(FileStorageObserver.create(
+    os.path.join(ROOT_DIR, 'results')))
 
 
 @ex.config
@@ -41,7 +43,8 @@ def configuration():
     batch_size = 128
     epochs = 5
 
-    snapshots_path = '../snapshots/json/{}/'.format(int(time.time()))
+    snapshots_path = os.path.join(
+        ROOT_DIR, 'snapshots', 'json', str(int(time.time())))
 
 
 @ex.capture

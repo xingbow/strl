@@ -18,8 +18,14 @@ from sacred.observers import MongoObserver
 from sacred.observers import FileStorageObserver
 
 ex = Experiment("bike-reposition-real")
+ex.observers.append(FileStorageObserver.create(
+    os.path.join(ROOT_DIR, 'results')))
+
+# if you have mongoDB, the experiment result can also be dumped into mongoDB,
+# more details can be found here:
+# https://sacred.readthedocs.io/en/latest/observers.html#mongo-observer
+
 # ex.observers.append(MongoObserver.create())
-ex.observers.append(FileStorageObserver.create(ROOT_DIR + 'results'))
 
 
 @ex.config
