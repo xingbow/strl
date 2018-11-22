@@ -82,8 +82,8 @@ def plot(path):
                          func=lambda i: print(i) or plot_frame(frames[i]),
                          frames=len(frames))
 
-    # plt.show()
-    anim.save('animate.gif', dpi=100, writer='imagemagick')
+    plt.show()
+    # anim.save('animate.gif', dpi=100, writer='imagemagick')
 
 
 if __name__ == "__main__":
