@@ -59,7 +59,6 @@ class Env(object):
 
 # ------------------------ event management  ------------------------------------
 
-
     def _push_event(self, event):
         i = len(self.history)
         self.history.append(event)
@@ -225,7 +224,7 @@ class Env(object):
 
     @property
     def state_size(self):
-        return self.num_regions * 4
+        return self.num_regions * 3
 
     @property
     def loss(self):
@@ -236,7 +235,10 @@ class Env(object):
     def _get_obs(self):
         max_limit = np.max(self.limits)
         return np.concatenate([self.loads / max_limit,
-                               self.future_demands / max_limit,
+                               #    self.future_demands / max_limit,
+                               # stop using it, because it overfits
+                               # the estimator's value and perform bad
+                               # on the real data
                                self.other_trikes_status / max_limit,
                                self.current_trike_status / max_limit])
 
@@ -268,6 +270,7 @@ class Env(object):
 
 
 # ------------------------ action encoding decoding ------------------------
+
 
     def decode_action(self, action):
         r = action % self.num_regions
@@ -312,6 +315,7 @@ class Env(object):
                     "p1": p1.tolist(),       # end position
                     "to_load": e['n'],       # number to load  at end position,
                     "loaded": e['l'],        # current bikes on this trike
+                    "capacity": self.capacity,      # trike capacity
                     "t0": e['t0'],           # start time
                     "t1": e['t'],            # end time
                     "id": e['i'],            # trike id
