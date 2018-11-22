@@ -86,7 +86,7 @@ class ArtificialSimulator(object):
 
         self.estimated_rents, self.estimated_returns, self.estimated_return_map\
             = self._sample_rent_return()
-
+ 
     def estimate_bike_arrival_time(self, t, r0, r1):
         return t + self._duration(t, r0, r1)
 
