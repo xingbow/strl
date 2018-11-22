@@ -1,4 +1,4 @@
-# Towards better bike reposition
+# Towards Better Bike Reposition
 
 > Our [github repository](https://github.com/enhuiz/strl) .
 
